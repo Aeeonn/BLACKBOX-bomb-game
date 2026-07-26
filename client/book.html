@@ -41,7 +41,7 @@ function arm() {
 }
 document.getElementById("start").onclick = arm;
 let lastPayload = null, presence = null;
-initStage(document.getElementById("stage"), ROLE);
+initStage(document.getElementById("stage"), ROLE, send);
 on("presence", m => { presence = m.payload; setPresence(m.payload); if (lastPayload) drawBookShells(lastPayload); });
 
 // BOOK's shell: slot indices only, no colour or texture - BOOK's own views()

@@ -10,12 +10,12 @@
 <pre id="nets" style="font-size:15px"></pre>
 <div id="log"></div>
 <script type="module">
-import { connect, on, logLine, fmtTime, ROLE } from "/common/net.js";
+import { connect, on, send, logLine, fmtTime, ROLE } from "/common/net.js";
 import { updateOverlay } from "/common/overlay.js";
 import { init as initStage, setPresence, setBomb, findPlayer } from "/common/stage.js";
 import { renderBombFace, paintCharge } from "/common/bombface.js";
 let lastPayload = null, presence = null;
-initStage(document.getElementById("stage"), ROLE);
+initStage(document.getElementById("stage"), ROLE, send);
 on("presence", m => { presence = m.payload; setPresence(m.payload); if (lastPayload) drawScopeShells(lastPayload); });
 on("log", m => logLine(m.text));
 

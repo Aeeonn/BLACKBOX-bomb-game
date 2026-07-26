@@ -21,7 +21,7 @@ import { init as initStage, setPresence, setBomb } from "/common/stage.js";
 import { renderBombFace } from "/common/bombface.js";
 let mod = 0, cell = 0, state = null;
 
-initStage(document.getElementById("stage"), ROLE);
+initStage(document.getElementById("stage"), ROLE, send);
 on("presence", m => setPresence(m.payload));
 on("state", m => { state = m.payload; draw(); updateOverlay(state.phase); updateTimerAudio(state.time_left, state.phase); setBomb(state); });
 on("log", m => logLine(m.text));

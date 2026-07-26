@@ -7,11 +7,14 @@
 // engine) can replace this file without any server or game code changing -
 // see AGENTS.md T7.
 //
-// Deliberately NOT wired to the network here: mouse movement only pans the
-// local view (a parallax effect standing in for "moving your head"). Turning
-// that into a real `pose` message sent to the server is T11's job. Likewise,
-// gestures, pointer rays and the commit-hold ring are not drawn yet - those
-// are T9/T10/T11/T12, once the interactions themselves exist to design UX for.
+// T11: mouse movement now ALSO drives real pose/gesture messages sent to the
+// server (via the `send` function passed into init()), not just the local
+// parallax. This file still never imports net.js directly and still never
+// touches module data - it only ever emits {yaw, pitch, gaze} and
+// {gesture: kind}, exactly the PRESENCE shapes server/stage.py already
+// expects and filters. Detection (mouse-look, shake/nod thresholds) is
+// client-side; per AGENTS.md T11, the emitted gesture is authoritative once
+// sent - the server does not re-validate *how* a gesture was produced.
 
 const ROLE_ORDER = ["hands", "eyes", "book", "scope", "dispatch"];
 
@@ -34,6 +37,17 @@ const OK = "#4c9a5a";
 
 const TABLE = { cx: 0.5, cy: 0.66, rx: 0.40, ry: 0.15 };
 const SEAT_ARC = [205, 335]; // degrees: the far rim of the table, across from the camera
+
+// T11 tuning. Expect these to move once real people try it - see the design
+// doc's own "expect to change T9-T12 based on what happens" note.
+const YAW_RANGE = 0.6;             // radians of head yaw at full mouse deflection
+const PITCH_RANGE = 0.4;           // radians of head pitch at full mouse deflection
+const MANUAL_GAZE_PITCH = 0.22;    // pitch past this (looking down) => gaze:"manual"
+const POSE_SEND_HZ_MS = 100;       // ~10Hz outgoing pose - well under presence's 20Hz
+const GESTURE_WINDOW_MS = 500;     // how far back the shake/nod detector looks
+const GESTURE_THRESHOLD = 0.9;     // oscillation "energy" needed to fire
+const GESTURE_MARGIN = 1.3;        // how much bigger one axis must be than the other
+const GESTURE_COOLDOWN_MS = 700;   // minimum gap between two emitted gestures
 
 export function clamp(v, lo, hi) {
   return Math.max(lo, Math.min(hi, v));
@@ -73,25 +87,83 @@ export function findPlayer(presence, role) {
   return (presence && presence.players.find(p => p.role === role)) || null;
 }
 
+// Detects "shake" (rapid horizontal mouse motion) vs "nod" (vertical),
+// distinguishing an oscillating wiggle from a smooth directed look-around:
+// a genuine shake covers a lot of *path* (sum of |dx| between samples) while
+// barely moving *net* distance (back-and-forth cancels out), whereas turning
+// your head to look left is one smooth motion where path and net distance are
+// close to equal. Exported as a factory (not a class) so each stage instance
+// gets its own independent history/cooldown state, and so it's trivially
+// unit-testable in isolation from the DOM/canvas.
+export function makeGestureDetector(opts = {}) {
+  const windowMs = opts.windowMs ?? GESTURE_WINDOW_MS;
+  const threshold = opts.threshold ?? GESTURE_THRESHOLD;
+  const margin = opts.margin ?? GESTURE_MARGIN;
+  const cooldownMs = opts.cooldownMs ?? GESTURE_COOLDOWN_MS;
+  let history = [];
+  let lastFired = -Infinity;
+
+  return {
+    // t in ms (same clock as performance.now()/rAF timestamps); x, y in -1..1.
+    // Returns "shake", "nod", or null.
+    sample(t, x, y) {
+      history.push({ t, x, y });
+      while (history.length > 1 && t - history[0].t > windowMs) history.shift();
+      if (history.length < 4 || t - lastFired < cooldownMs) return null;
+
+      let pathH = 0, pathV = 0;
+      for (let i = 1; i < history.length; i++) {
+        pathH += Math.abs(history[i].x - history[i - 1].x);
+        pathV += Math.abs(history[i].y - history[i - 1].y);
+      }
+      const netH = Math.abs(history[history.length - 1].x - history[0].x);
+      const netV = Math.abs(history[history.length - 1].y - history[0].y);
+      const oscH = pathH - netH;
+      const oscV = pathV - netV;
+
+      let kind = null;
+      if (oscH > threshold && oscH > oscV * margin) kind = "shake";
+      else if (oscV > threshold && oscV > oscH * margin) kind = "nod";
+
+      if (kind) { lastFired = t; history = []; }
+      return kind;
+    },
+  };
+}
+
 let canvas = null, ctx = null;
-let seats = [];   // [{role, connected, moving, hasDetail, yaw, pitch, displayYaw, displayPitch}]
+let seats = [];   // [{role, connected, moving, hasDetail, yaw, pitch, displayYaw, displayPitch, gesture}]
 let bomb = { phase: "running", moduleCount: 0 };
 let parallax = { x: 0, y: 0, targetX: 0, targetY: 0 };
 let lastTs = null;
 let looping = false;
+let sendFn = () => {};
+let gestureDetector = null;
+let lastPoseSentAt = -Infinity;
 
-export function init(canvasEl, role) {
+// Third argument is the same `send` exported by common/net.js - passed in
+// rather than imported directly so this file still has zero import of
+// net.js, keeping it swappable/testable independent of the transport layer.
+// Omit it (e.g. in tests) and pose/gesture detection simply has nowhere to
+// send - everything else (parallax, rendering) still works.
+export function init(canvasEl, role, send) {
   canvas = canvasEl;
   ctx = canvas.getContext("2d");
+  sendFn = typeof send === "function" ? send : () => {};
+  gestureDetector = makeGestureDetector();
   seats = seatOrder(role).map(r => ({
     role: r, connected: false, moving: false, hasDetail: false,
-    yaw: 0, pitch: 0, displayYaw: 0, displayPitch: 0,
+    yaw: 0, pitch: 0, displayYaw: 0, displayPitch: 0, gesture: null,
   }));
 
   canvas.addEventListener("mousemove", e => {
     const r = canvas.getBoundingClientRect();
-    parallax.targetX = clamp(((e.clientX - r.left) / r.width) * 2 - 1, -1, 1);
-    parallax.targetY = clamp(((e.clientY - r.top) / r.height) * 2 - 1, -1, 1);
+    const x = clamp(((e.clientX - r.left) / r.width) * 2 - 1, -1, 1);
+    const y = clamp(((e.clientY - r.top) / r.height) * 2 - 1, -1, 1);
+    parallax.targetX = x;
+    parallax.targetY = y;
+    const kind = gestureDetector.sample(performance.now(), x, y);
+    if (kind) sendFn({ type: "gesture", kind });
   });
   canvas.addEventListener("mouseleave", () => {
     parallax.targetX = 0; parallax.targetY = 0;
@@ -105,8 +177,8 @@ export function init(canvasEl, role) {
 
 // PRESENCE in. Only ever stores role/connected/moving, and - only when the
 // server actually included them (never for HANDS viewing other players; see
-// server/stage.py) - yaw/pitch. Never stores gesture/pointer/gaze: those are
-// added deliberately in T9/T11/T12, not smuggled in early unused.
+// server/stage.py) - yaw/pitch/gesture. Never stores pointer: that's T12's
+// job, not smuggled in early unused.
 export function setPresence(payload) {
   const byRole = {};
   for (const p of (payload.players || [])) byRole[p.role] = p;
@@ -119,6 +191,9 @@ export function setPresence(payload) {
     if (seat.hasDetail) {
       seat.yaw = p.yaw || 0;
       seat.pitch = p.pitch || 0;
+      seat.gesture = p.gesture || null;
+    } else {
+      seat.gesture = null;
     }
   }
 }
@@ -146,6 +221,17 @@ function tick(ts) {
     seat.displayPitch = smoothTowards(seat.displayPitch, seat.pitch, dt, 8);
   }
 
+  if (ts - lastPoseSentAt > POSE_SEND_HZ_MS) {
+    lastPoseSentAt = ts;
+    const yaw = parallax.x * YAW_RANGE;
+    const pitch = parallax.y * PITCH_RANGE;
+    // "manual" stands in for looking down at BOOK's lectern until T12 gives
+    // BOOK an actual in-world manual object to look at; "bomb" is the
+    // sensible default since that's what's in front of the camera otherwise.
+    const gaze = pitch > MANUAL_GAZE_PITCH ? "manual" : "bomb";
+    sendFn({ type: "pose", yaw, pitch, gaze });
+  }
+
   render(ts);
   requestAnimationFrame(tick);
 }
@@ -157,8 +243,10 @@ export function render(ts) {
   ctx.fillStyle = BG;
   ctx.fillRect(0, 0, w, h);
 
-  // Local-only head parallax - stands in for "mouse moves your head" until
-  // T11 also sends it to the server as a real pose message.
+  // Local head parallax - the camera itself pans opposite the mouse. The
+  // yaw/pitch actually sent to the server (in tick(), above) comes from the
+  // same underlying parallax state, so what other players see matches what
+  // moved this camera.
   const px = -parallax.x * 14, py = -parallax.y * 8;
   ctx.save();
   ctx.translate(px, py);
@@ -217,6 +305,13 @@ function drawSeat(seat, index, total, w, h, ts) {
   }
   const yaw = seat.hasDetail ? seat.displayYaw : 0;
 
+  // Gesture animation: a brief bob (nod) or wag (shake) on the head only -
+  // gated on hasDetail, same as yaw/pitch, so HANDS never animates other
+  // seats this way either (hard rule 5 holds structurally, not by role-check).
+  let bobY = 0, wagX = 0;
+  if (seat.hasDetail && seat.gesture === "nod") bobY = Math.sin(ts / 90) * 5;
+  if (seat.hasDetail && seat.gesture === "shake") wagX = Math.sin(ts / 70) * 6;
+
   ctx.save();
   ctx.globalAlpha = alpha;
   ctx.translate(p.x, p.y);
@@ -226,13 +321,13 @@ function drawSeat(seat, index, total, w, h, ts) {
   ctx.strokeStyle = seat.connected ? FG : DIM;
   ctx.lineWidth = 1.5;
 
-  ctx.beginPath(); // shoulders
+  ctx.beginPath(); // shoulders (gestures move the head, not the shoulders)
   ctx.ellipse(0, 16, 20, 12, 0, 0, Math.PI * 2);
   ctx.fill();
   ctx.stroke();
 
   ctx.beginPath(); // head
-  ctx.arc(0, -6, 12, 0, Math.PI * 2);
+  ctx.arc(wagX, -6 + bobY, 12, 0, Math.PI * 2);
   ctx.fill();
   ctx.stroke();
 

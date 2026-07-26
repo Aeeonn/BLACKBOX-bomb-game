@@ -7,10 +7,10 @@
 <p style="color:#6b6b6b;font-size:13px">Global layer only. No module contents. Talk to HANDS.</p>
 <div id="log"></div>
 <script type="module">
-import { connect, on, logLine, fmtTime, ROLE } from "/common/net.js";
+import { connect, on, send, logLine, fmtTime, ROLE } from "/common/net.js";
 import { updateOverlay } from "/common/overlay.js";
 import { init as initStage, setPresence, setBomb } from "/common/stage.js";
-initStage(document.getElementById("stage"), ROLE);
+initStage(document.getElementById("stage"), ROLE, send);
 on("presence", m => setPresence(m.payload));
 on("log", m => logLine(m.text));
 on("state", s => {
