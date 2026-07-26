@@ -69,7 +69,8 @@ class Room:
         if self.bomb is not None and self.bomb.phase == "running":
             return
         self.bomb = Bomb(seed if seed is not None else random.randrange(2 ** 31),
-                         module_count=modules, seconds=seconds)
+                         module_count=modules, seconds=seconds,
+                         roles=set(self.sockets.keys()))
         await self.log("Bomb armed. Seed %d." % self.bomb.seed)
         if self.task is None or self.task.done():
             self.task = asyncio.create_task(self._loop())

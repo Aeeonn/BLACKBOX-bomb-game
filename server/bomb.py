@@ -4,16 +4,20 @@ import dataclasses
 import random
 import string
 
-from .modules.base import Result
-from .modules.m01_braid_hue import BraidHue
+from .modules.base import REGISTRY, Result
 
 CASINGS = ["rough", "smooth", "greasy"]
 BADGES = ["red", "blue", "green", "yellow"]
 STICKERS = ["ACME", "KOWALSKI", "VOSS"]
 
+# Every role the game currently supports. Defined here (not imported from
+# room.py) to avoid a circular import, since Room already imports Bomb.
+ALL_ROLES = {"hands", "eyes", "book", "scope", "dispatch"}
+
 
 class Bomb:
-    def __init__(self, seed: int, module_count: int = 2, seconds: float = 300.0):
+    def __init__(self, seed: int, module_count: int = 2, seconds: float = 300.0,
+                 pool: list[str] | None = None, roles: set[str] | None = None):
         self.seed = seed
         rng = random.Random(seed)
 
@@ -36,9 +40,24 @@ class Bomb:
         }
         all_flags = {**self.flags_hands, **self.flags_eyes, **self.flags_scope}
 
+        # Pick modules from the registry rather than hardcoding one. `pool`
+        # narrows which ids are in play (defaults to everything registered);
+        # `roles` is who's actually connected (defaults to all five) and
+        # excludes any module whose requires_roles isn't fully covered - e.g.
+        # a hands/eyes/book room must never draw a SCOPE-dependent module.
+        roles = ALL_ROLES if roles is None else roles
+        candidate_ids = list(REGISTRY.keys()) if pool is None else pool
+        eligible = [mid for mid in candidate_ids
+                    if REGISTRY[mid].requires_roles <= roles]
+        if not eligible:
+            raise ValueError(
+                "no module in pool %r has its requires_roles satisfied by roles %r"
+                % (candidate_ids, sorted(roles)))
+
         self.modules = []
         for _ in range(module_count):
-            m = BraidHue()
+            cls = REGISTRY[rng.choice(eligible)]
+            m = cls()
             m.generate(rng, all_flags)
             self.modules.append(m)
 

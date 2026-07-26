@@ -65,6 +65,7 @@ class Module(ABC):
     id: str = "??"
     name: str = "unnamed"
     needy: bool = False
+    requires_roles: set[str] = set()
 
     def __init__(self) -> None:
         self.solved = False
