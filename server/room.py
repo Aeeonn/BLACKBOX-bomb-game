@@ -6,6 +6,7 @@ import time
 
 from .bomb import Bomb
 from .modules.base import Result
+from .stage import Stage
 
 ROLES = ["hands", "eyes", "book", "scope", "dispatch"]
 CARDS = ["STOP", "GO", "YES", "NO", "WAIT", "AGAIN", "1", "2", "3", "4", "LEFT", "RIGHT"]
@@ -26,18 +27,39 @@ class Room:
         self.code = code
         self.sockets: dict[str, object] = {}
         self.bomb: Bomb | None = None
+        self.stage = Stage()
         self.last_flash = 0.0
         self.task = None
+        self.presence_task = None
 
     def attach(self, role: str, sock) -> bool:
         if role not in ROLES or role in self.sockets:
             return False
         self.sockets[role] = sock
+        self.stage.attach(role)
+        self._ensure_presence_loop()
         return True
 
     def detach(self, role: str, sock) -> None:
         if self.sockets.get(role) is sock:
             del self.sockets[role]
+            self.stage.detach(role)
+
+    def _ensure_presence_loop(self) -> None:
+        # Presence runs independently of the bomb's 10Hz tick loop, at 20Hz,
+        # and even before ARM - players should see each other in the lobby.
+        # Started lazily on first attach(); guarded because some callers
+        # (unit tests) invoke attach() outside a running event loop. Checking
+        # for a running loop *before* constructing the coroutine (rather than
+        # catching the RuntimeError from create_task) avoids leaving a bare
+        # never-awaited coroutine behind.
+        if self.presence_task is not None and not self.presence_task.done():
+            return
+        try:
+            loop = asyncio.get_running_loop()
+        except RuntimeError:
+            return
+        self.presence_task = loop.create_task(self._presence_loop())
 
     async def send(self, role: str, msg: dict) -> None:
         sock = self.sockets.get(role)
@@ -57,6 +79,21 @@ class Room:
         for role in list(self.sockets):
             await self.send(role, {"type": "state", "role": role,
                                    "payload": self.bomb.snapshot(role)})
+
+    async def broadcast_presence(self) -> None:
+        for role in list(self.sockets):
+            await self.send(role, {"type": "presence", "payload": self.stage.presence(role)})
+
+    async def _presence_loop(self) -> None:
+        # Independent of the bomb tick loop and of ARM state - presence (who's
+        # here, moving, gesturing) exists in the lobby too. Exits once nobody
+        # is connected; _ensure_presence_loop() restarts it on the next attach.
+        try:
+            while self.sockets:
+                await self.broadcast_presence()
+                await asyncio.sleep(0.05)  # 20 Hz
+        except asyncio.CancelledError:
+            pass
 
     async def log(self, text: str) -> None:
         for role in list(self.sockets):
@@ -118,5 +155,18 @@ class Room:
                 await self.send("eyes", {"type": "flash", "card": card})
                 await self.send("book", {"type": "flash_ok", "card": card})
 
+        elif kind == "pose":
+            self.stage.apply_pose(role, msg.get("yaw", 0.0), msg.get("pitch", 0.0),
+                                  msg.get("gaze"))
+            # No immediate broadcast - poses are batched by _presence_loop at
+            # 20Hz rather than fanned out on every single message.
+
+        elif kind == "gesture":
+            self.stage.apply_gesture(role, msg.get("kind", ""))
+
+        elif kind == "point":
+            self.stage.apply_point(role, msg.get("target"))
+
         elif kind == "hello":
             await self.broadcast_state()
+            await self.broadcast_presence()
