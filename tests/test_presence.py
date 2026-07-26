@@ -1,16 +1,20 @@
 
-"""T6/T9: the presence leak test. As important as test_invariants.py - see
-AGENTS.md's presence filter matrix. HANDS must never receive yaw, pitch,
+"""T6/T9/T10: the presence leak test. As important as test_invariants.py -
+see AGENTS.md's presence filter matrix. HANDS must never receive yaw, pitch,
 gaze, gesture or pointer keys for OTHER players; every role (HANDS included)
 still gets connected/moving for everyone, and full detail for themselves.
 
 T9 adds HANDS' probe echo (module+cell indices only, gated by probe_echo) -
 the one presence field visible to every role including HANDS' own entry.
+
+T10 adds the commit-charge ring: visible to every role unconditionally (no
+flag - hard rule 12 says it must never be local-only), with progress computed
+live from the server's own clock.
 """
 import asyncio
 
 from server.room import Room
-from server.stage import GESTURE_TTL, Stage
+from server.stage import GESTURE_TTL, HOLD_DURATIONS_S, Stage
 
 
 class _DummySocket:
@@ -208,4 +212,117 @@ def test_rearm_clears_a_stale_probe_position():
 
     seen_by_eyes = {e["role"]: e for e in room.stage.presence("eyes")["players"]}
     assert seen_by_eyes["hands"]["probe"] is None
+
+
+def test_charge_progress_visible_to_every_role_including_hands_own():
+    stage = Stage()
+    for role in ("hands", "eyes", "book", "scope", "dispatch"):
+        stage.attach(role)
+    stage.start_charge("hands", "cut", module=0, cell=1)
+
+    for viewer in ("hands", "eyes", "book", "scope", "dispatch"):
+        entry = next(e for e in stage.presence(viewer)["players"] if e["role"] == "hands")
+        assert entry["charge"] is not None, "viewer %r did not see the charge ring" % viewer
+        assert entry["charge"]["module"] == 0
+        assert entry["charge"]["cell"] == 1
+        assert entry["charge"]["kind"] == "cut"
+        assert 0.0 <= entry["charge"]["progress"] <= 1.0
+
+
+def test_charge_only_tracks_the_hands_role():
+    stage = Stage()
+    stage.attach("hands")
+    stage.attach("eyes")
+    stage.start_charge("eyes", "cut", module=0, cell=0)  # must be a silent no-op
+
+    entry = next(e for e in stage.presence("book")["players"] if e["role"] == "eyes")
+    assert "charge" not in entry  # only the hands row ever carries this key
+
+
+def test_charge_ignores_unknown_kind():
+    stage = Stage()
+    stage.attach("hands")
+    stage.start_charge("hands", "not_a_real_kind", module=0, cell=0)
+
+    entry = next(e for e in stage.presence("eyes")["players"] if e["role"] == "hands")
+    assert entry["charge"] is None
+
+
+def test_charge_progress_increases_with_elapsed_time():
+    stage = Stage()
+    stage.attach("hands")
+    stage.start_charge("hands", "cut", module=0, cell=0)
+
+    entry = next(e for e in stage.presence("eyes")["players"] if e["role"] == "hands")
+    early_progress = entry["charge"]["progress"]
+
+    # simulate half the 1s cut duration elapsing without a real sleep
+    stage.avatars["hands"].charge["started_at"] -= HOLD_DURATIONS_S["cut"] * 0.5
+    entry = next(e for e in stage.presence("eyes")["players"] if e["role"] == "hands")
+    assert entry["charge"]["progress"] > early_progress
+
+
+def test_charge_progress_clamps_at_one_past_the_hold_duration():
+    stage = Stage()
+    stage.attach("hands")
+    stage.start_charge("hands", "discharge", module=0, cell=0)
+
+    # simulate well past the 2s discharge duration
+    stage.avatars["hands"].charge["started_at"] -= HOLD_DURATIONS_S["discharge"] * 5
+
+    entry = next(e for e in stage.presence("eyes")["players"] if e["role"] == "hands")
+    assert entry["charge"]["progress"] == 1.0
+
+
+def test_charge_clears_on_stop():
+    stage = Stage()
+    stage.attach("hands")
+    stage.start_charge("hands", "cut", module=0, cell=0)
+    stage.stop_charge("hands")
+
+    entry = next(e for e in stage.presence("eyes")["players"] if e["role"] == "hands")
+    assert entry["charge"] is None
+
+
+def test_charge_clears_on_disconnect():
+    stage = Stage()
+    stage.attach("hands")
+    stage.start_charge("hands", "cut", module=0, cell=0)
+    stage.detach("hands")
+
+    entry = next(e for e in stage.presence("eyes")["players"] if e["role"] == "hands")
+    assert entry["charge"] is None
+
+
+def test_room_dispatches_charge_start_and_stop_into_stage():
+    room = Room("JJJJ")
+    hands, eyes = _DummySocket(), _DummySocket()
+    room.attach("hands", hands)
+    room.attach("eyes", eyes)
+
+    asyncio.run(room.handle("hands", hands,
+        {"type": "charge", "action": "start", "kind": "cut", "module": 0, "cell": 3}))
+    seen = {e["role"]: e for e in room.stage.presence("eyes")["players"]}
+    assert seen["hands"]["charge"]["module"] == 0
+    assert seen["hands"]["charge"]["cell"] == 3
+
+    asyncio.run(room.handle("hands", hands, {"type": "charge", "action": "stop"}))
+    seen = {e["role"]: e for e in room.stage.presence("eyes")["players"]}
+    assert seen["hands"]["charge"] is None
+
+
+def test_rearm_clears_a_stale_charge():
+    room = Room("KKKK")
+    hands, eyes = _DummySocket(), _DummySocket()
+    room.attach("hands", hands)
+    room.attach("eyes", eyes)
+    asyncio.run(room.start(modules=1, seed=1))
+    asyncio.run(room.handle("hands", hands,
+        {"type": "charge", "action": "start", "kind": "cut", "module": 0, "cell": 2}))
+    room.bomb.phase = "won"
+
+    asyncio.run(room.start(modules=1, seed=2))  # REARM
+
+    seen_by_eyes = {e["role"]: e for e in room.stage.presence("eyes")["players"]}
+    assert seen_by_eyes["hands"]["charge"] is None
 

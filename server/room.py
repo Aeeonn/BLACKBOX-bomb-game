@@ -110,9 +110,10 @@ class Room:
                          module_count=modules, seconds=seconds,
                          roles=set(self.sockets.keys()))
         self.stage.probe_echo = probe_echo
-        # A stale probe position from the previous round could momentarily
+        # A stale probe/charge from the previous round could momentarily
         # point at a slot that doesn't exist in the new bomb's modules.
         self.stage.avatars["hands"].probe = None
+        self.stage.avatars["hands"].charge = None
         await self.log("Bomb armed. Seed %d." % self.bomb.seed)
         if self.task is None or self.task.done():
             self.task = asyncio.create_task(self._loop())
@@ -176,6 +177,16 @@ class Room:
 
         elif kind == "point":
             self.stage.apply_point(role, msg.get("target"))
+
+        elif kind == "charge":
+            # Presence-layer, like pose/gesture/point above - not gated on
+            # self.bomb, since Stage never needs to know whether a bomb
+            # exists to track where HANDS' hold currently is.
+            if msg.get("action") == "start":
+                self.stage.start_charge(role, msg.get("kind", ""),
+                                        int(msg.get("module", 0)), int(msg.get("cell", 0)))
+            else:
+                self.stage.stop_charge(role)
 
         elif kind == "hello":
             await self.broadcast_state()

@@ -65,6 +65,14 @@ export function ellipsePoint(cx, cy, rx, ry, angleDeg) {
   return { x: cx + rx * Math.cos(a), y: cy + ry * Math.sin(a) };
 }
 
+// Small shared lookup for "find one role's row in a presence payload" - used
+// by eyes.html/book.html/scope.html for both HANDS' probe echo (T9) and
+// commit-charge ring (T10), so this one tiny piece of bookkeeping doesn't
+// have to be reinvented a third time by a future ticket.
+export function findPlayer(presence, role) {
+  return (presence && presence.players.find(p => p.role === role)) || null;
+}
+
 let canvas = null, ctx = null;
 let seats = [];   // [{role, connected, moving, hasDetail, yaw, pitch, displayYaw, displayPitch}]
 let bomb = { phase: "running", moduleCount: 0 };

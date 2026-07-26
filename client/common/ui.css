@@ -44,3 +44,6 @@ button:hover { background: #2c2c2c; }
 .bombface .slot.probed { border-color: #d9a441; box-shadow: 0 0 0 2px rgba(217,164,65,.35); }
 .bombface .slot.probed::after { content: "\270B"; position: absolute; top: -11px; right: -9px;
                                  font-size: 15px; }
+.bombface .slot.charging { border-color: var(--hot); }
+.bombface .slot .charge-fill { position: absolute; left: 0; right: 0; bottom: 0; height: 0;
+                                background: rgba(200,64,47,.45); pointer-events: none; }

@@ -60,19 +60,33 @@ addEventListener("keydown", e => {
 });
 
 const holds = {};
-function keyHold(key, ms, fn) {
+// Hold durations. Must match server/stage.py's HOLD_DURATIONS_S - that copy
+// is what the broadcast ring's fill rate uses; this copy is what decides
+// when THIS client actually fires the real cut/discharge action. Keep them
+// in sync if either ever changes.
+const HOLD_MS = { cut: 1000, discharge: 2000 };
+
+function beginCharge(kind) { send({ type: "charge", action: "start", kind, module: mod, cell }); }
+function endCharge() { send({ type: "charge", action: "stop" }); }
+
+function keyHold(key, kind, fireAction) {
   addEventListener("keydown", e => {
     if (e.key.toLowerCase() !== key || holds[key]) return;
-    holds[key] = setTimeout(() => { fn(); holds[key] = null; }, ms);
+    beginCharge(kind);
+    holds[key] = setTimeout(() => { endCharge(); fireAction(); holds[key] = null; }, HOLD_MS[kind]);
   });
   addEventListener("keyup", e => {
-    if (e.key.toLowerCase() === key && holds[key]) { clearTimeout(holds[key]); holds[key] = null; }
+    if (e.key.toLowerCase() === key && holds[key]) { clearTimeout(holds[key]); holds[key] = null; endCharge(); }
   });
 }
-keyHold("c", 1000, () => send({ type: "act", module: mod, action: { cut: cell } }));
-keyHold("d", 2000, () => send({ type: "act", module: mod, action: { discharge: cell } }));
-holdButton(document.getElementById("cut"), 1000, () => send({ type: "act", module: mod, action: { cut: cell } }));
-holdButton(document.getElementById("dis"), 2000, () => send({ type: "act", module: mod, action: { discharge: cell } }));
+keyHold("c", "cut", () => send({ type: "act", module: mod, action: { cut: cell } }));
+keyHold("d", "discharge", () => send({ type: "act", module: mod, action: { discharge: cell } }));
+holdButton(document.getElementById("cut"), HOLD_MS.cut,
+  () => send({ type: "act", module: mod, action: { cut: cell } }),
+  () => beginCharge("cut"), endCharge);
+holdButton(document.getElementById("dis"), HOLD_MS.discharge,
+  () => send({ type: "act", module: mod, action: { discharge: cell } }),
+  () => beginCharge("discharge"), endCharge);
 
 connect();
 </script>

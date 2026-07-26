@@ -36,7 +36,13 @@ export function fmtTime(s) {
 }
 
 // Hold-to-commit: gives BOOK one second to slam STOP. Do not remove.
-export function holdButton(el, ms, onComplete) {
+// onStart/onEnd are optional hooks so callers (hands.html) can report the
+// hold's start/stop to the server for the broadcast commit-charge ring
+// (AGENTS.md hard rule 12 / T10) without this generic UI helper needing to
+// know anything about networking. onEnd fires exactly once per hold attempt,
+// whether it ended by completing or by early release - callers that need to
+// tell the two apart can check their own state instead of branching here.
+export function holdButton(el, ms, onComplete, onStart, onEnd) {
   let t0 = null, raf = null;
   const bar = el.querySelector(".fill");
   function frame() {
@@ -44,8 +50,12 @@ export function holdButton(el, ms, onComplete) {
     if (bar) bar.style.width = (p * 100) + "%";
     if (p >= 1) { stop(); onComplete(); } else { raf = requestAnimationFrame(frame); }
   }
-  function start() { if (t0 !== null) return; t0 = performance.now(); frame(); }
-  function stop() { t0 = null; if (raf) cancelAnimationFrame(raf); if (bar) bar.style.width = "0%"; }
+  function start() { if (t0 !== null) return; t0 = performance.now(); if (onStart) onStart(); frame(); }
+  function stop() {
+    const wasActive = t0 !== null;
+    t0 = null; if (raf) cancelAnimationFrame(raf); if (bar) bar.style.width = "0%";
+    if (wasActive && onEnd) onEnd();
+  }
   el.addEventListener("mousedown", start);
   el.addEventListener("mouseup", stop);
   el.addEventListener("mouseleave", stop);

@@ -15,8 +15,8 @@
 import { connect, on, send, logLine, fmtTime, ROOM, ROLE } from "/common/net.js";
 import { updateOverlay } from "/common/overlay.js";
 import { updateTimerAudio } from "/common/timer-audio.js";
-import { init as initStage, setPresence, setBomb } from "/common/stage.js";
-import { renderBombFace } from "/common/bombface.js";
+import { init as initStage, setPresence, setBomb, findPlayer } from "/common/stage.js";
+import { renderBombFace, paintCharge } from "/common/bombface.js";
 const CARDS = ["STOP","GO","YES","NO","WAIT","AGAIN","1","2","3","4","LEFT","RIGHT"];
 let cooling = false;
 const wrap = document.getElementById("cards");
@@ -44,11 +44,6 @@ let lastPayload = null, presence = null;
 initStage(document.getElementById("stage"), ROLE);
 on("presence", m => { presence = m.payload; setPresence(m.payload); if (lastPayload) drawBookShells(lastPayload); });
 
-function handsProbe() {
-  const p = presence && presence.players.find(x => x.role === "hands");
-  return (p && p.probe) || null;
-}
-
 // BOOK's shell: slot indices only, no colour or texture - BOOK's own views()
 // never carries per-slot data in the first place, so there is nothing here
 // that could leak. Reuses one .bombface-wrap per module across updates
@@ -59,7 +54,9 @@ function drawBookShells(payload) {
   while (container.children.length > layouts.length) {
     container.removeChild(container.lastChild);
   }
-  const hp = handsProbe();
+  const hp = findPlayer(presence, "hands");
+  const probe = hp && hp.probe;
+  const charge = hp && hp.charge;
   layouts.forEach((layout, i) => {
     let box = container.children[i];
     if (!box) {
@@ -72,8 +69,11 @@ function drawBookShells(payload) {
     box.querySelector(".bombface-label").textContent =
       "Module " + (i + 1) + (mv.module ? " - " + mv.module : "") + (mv.solved ? " (solved)" : "");
     renderBombFace(box.querySelector(".bombface"), layout, (el, slot, idx) => {
-      el.className = "slot" + (hp && hp.module === i && hp.cell === idx ? " probed" : "");
+      const isProbed = probe && probe.module === i && probe.cell === idx;
+      const isCharging = charge && charge.module === i && charge.cell === idx;
+      el.className = "slot" + (isProbed ? " probed" : "") + (isCharging ? " charging" : "");
       el.textContent = String(idx + 1);
+      paintCharge(el, isCharging ? charge.progress : null);
     });
   });
 }

@@ -26,3 +26,22 @@ export function renderBombFace(container, layout, paint) {
     paint(el, slot, i);
   });
 }
+
+// Shared commit-charge fill (AGENTS.md hard rule 12 / T10). Call this AFTER
+// setting el.textContent/innerHTML in your paint callback - both of those
+// replace all of el's children, which would otherwise wipe the fill div this
+// creates. Pass progress=null (or omit the call) when this slot isn't the
+// one currently charging, to remove any leftover fill from a previous paint.
+export function paintCharge(el, progress) {
+  let fill = el.querySelector(".charge-fill");
+  if (progress == null) {
+    if (fill) fill.remove();
+    return;
+  }
+  if (!fill) {
+    fill = document.createElement("div");
+    fill.className = "charge-fill";
+    el.appendChild(fill);
+  }
+  fill.style.height = (progress * 100) + "%";
+}

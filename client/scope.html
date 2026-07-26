@@ -12,17 +12,12 @@
 <script type="module">
 import { connect, on, logLine, fmtTime, ROLE } from "/common/net.js";
 import { updateOverlay } from "/common/overlay.js";
-import { init as initStage, setPresence, setBomb } from "/common/stage.js";
-import { renderBombFace } from "/common/bombface.js";
+import { init as initStage, setPresence, setBomb, findPlayer } from "/common/stage.js";
+import { renderBombFace, paintCharge } from "/common/bombface.js";
 let lastPayload = null, presence = null;
 initStage(document.getElementById("stage"), ROLE);
 on("presence", m => { presence = m.payload; setPresence(m.payload); if (lastPayload) drawScopeShells(lastPayload); });
 on("log", m => logLine(m.text));
-
-function handsProbe() {
-  const p = presence && presence.players.find(x => x.role === "hands");
-  return (p && p.probe) || null;
-}
 
 // SCOPE's shell: slot indices only, same as BOOK - SCOPE's own views() has no
 // per-slot colour or texture either, only the netlist already shown below.
@@ -32,7 +27,9 @@ function drawScopeShells(payload) {
   while (container.children.length > layouts.length) {
     container.removeChild(container.lastChild);
   }
-  const hp = handsProbe();
+  const hp = findPlayer(presence, "hands");
+  const probe = hp && hp.probe;
+  const charge = hp && hp.charge;
   layouts.forEach((layout, i) => {
     let box = container.children[i];
     if (!box) {
@@ -43,8 +40,11 @@ function drawScopeShells(payload) {
     }
     box.querySelector(".bombface-label").textContent = "Module " + (i + 1);
     renderBombFace(box.querySelector(".bombface"), layout, (el, slot, idx) => {
-      el.className = "slot" + (hp && hp.module === i && hp.cell === idx ? " probed" : "");
+      const isProbed = probe && probe.module === i && probe.cell === idx;
+      const isCharging = charge && charge.module === i && charge.cell === idx;
+      el.className = "slot" + (isProbed ? " probed" : "") + (isCharging ? " charging" : "");
       el.textContent = String(idx + 1);
+      paintCharge(el, isCharging ? charge.progress : null);
     });
   });
 }

@@ -13,6 +13,15 @@ ROLES = ("hands", "eyes", "book", "scope", "dispatch")
 GESTURE_TTL = 1.2   # seconds a gesture stays visible before clearing itself
 MOVING_TTL = 0.5    # seconds after a pose update before "moving" clears
 
+# Canonical hold durations for the commit-charge ring (AGENTS.md hard rule 12:
+# "1s hold (2s discharge)"). The server owns these so the ring's fill rate is
+# identical for every viewer regardless of the charging client's own frame
+# timing or network latency, and so a client can't lie about how fast it
+# should fill. hands.html's own local action-firing timers use the same
+# values for a different purpose (deciding when to actually send the `act`
+# message) - see the comment there if either number ever changes.
+HOLD_DURATIONS_S = {"cut": 1.0, "discharge": 2.0}
+
 
 @dataclass
 class Avatar:
@@ -30,6 +39,7 @@ class Avatar:
     gesture_at: float = 0.0
     pointer: dict | None = None
     probe: dict | None = None
+    charge: dict | None = None
     last_pose_at: float = 0.0
 
     @property
@@ -66,7 +76,7 @@ class Stage:
             return
         a.connected = False
         a.yaw = a.pitch = 0.0
-        a.gaze = a.gesture = a.pointer = a.probe = None
+        a.gaze = a.gesture = a.pointer = a.probe = a.charge = None
 
     def apply_pose(self, role: str, yaw: float, pitch: float, gaze: str | None) -> None:
         a = self.avatars.get(role)
@@ -108,6 +118,36 @@ class Stage:
             return
         a.probe = {"module": module, "cell": cell}
 
+    def start_charge(self, role: str, kind: str, module: int, cell: int) -> None:
+        """HANDS begins holding to cut/discharge. Only module+cell indices and
+        a start timestamp are stored - presence() computes the live fill
+        fraction from the server's own clock every tick (same self-correcting
+        pattern as Avatar.moving), so the ring can never end up stuck at the
+        wrong fraction for everyone just because a `stop` message was dropped
+        or delayed, and a client can't lie about how fast it fills. See
+        AGENTS.md hard rule 12 and T10.
+        """
+        if role != "hands" or kind not in HOLD_DURATIONS_S:
+            return
+        a = self.avatars.get(role)
+        if a is None:
+            return
+        a.charge = {"kind": kind, "module": module, "cell": cell, "started_at": time.monotonic()}
+
+    def stop_charge(self, role: str) -> None:
+        a = self.avatars.get(role)
+        if a is not None:
+            a.charge = None
+
+    def _charge_view(self, a: Avatar) -> dict | None:
+        if a.charge is None:
+            return None
+        duration = HOLD_DURATIONS_S[a.charge["kind"]]
+        elapsed = time.monotonic() - a.charge["started_at"]
+        progress = max(0.0, min(1.0, elapsed / duration))
+        return {"kind": a.charge["kind"], "module": a.charge["module"],
+                "cell": a.charge["cell"], "progress": progress}
+
     def presence(self, role: str) -> dict:
         """Per-role filtered presence payload. See AGENTS.md's presence filter
         matrix: HANDS never receives yaw/pitch/gaze/gesture/pointer keys for
@@ -116,7 +156,9 @@ class Stage:
         of which role they are. HANDS' probe cell (module+cell indices, never
         the descriptor text) is the one exception to the "hidden from HANDS'
         view of others" rule: it is visible to every role, including HANDS'
-        own entry, per the matrix - gated only by probe_echo.
+        own entry, per the matrix - gated only by probe_echo. The commit-charge
+        ring is visible to every role unconditionally (no flag): hard rule 12
+        says it must never be optimised away or made local-only.
         """
         players = []
         for other_role, a in self.avatars.items():
@@ -129,5 +171,7 @@ class Stage:
                 entry["pointer"] = a.pointer
             if other_role == "hands" and self.probe_echo:
                 entry["probe"] = a.probe
+            if other_role == "hands":
+                entry["charge"] = self._charge_view(a)
             players.append(entry)
         return {"players": players}

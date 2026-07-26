@@ -12,8 +12,8 @@
 <script type="module">
 import { connect, on, logLine, fmtTime, ROLE } from "/common/net.js";
 import { updateOverlay } from "/common/overlay.js";
-import { init as initStage, setPresence, setBomb } from "/common/stage.js";
-import { renderBombFace } from "/common/bombface.js";
+import { init as initStage, setPresence, setBomb, findPlayer } from "/common/stage.js";
+import { renderBombFace, paintCharge } from "/common/bombface.js";
 let mod = 0, state = null, presence = null;
 const SWATCH = { red:"#b33", blue:"#36c", yellow:"#dc3", white:"#eee", black:"#000", green:"#3a3" };
 
@@ -27,11 +27,6 @@ on("flash", m => {
   setTimeout(() => { f.style.display = "none"; }, 1200);
 });
 
-function handsProbe() {
-  const p = presence && presence.players.find(x => x.role === "hands");
-  return (p && p.probe) || null;
-}
-
 function draw() {
   const s = state; if (!s) return;
   document.getElementById("time").textContent = fmtTime(s.time_left);
@@ -43,12 +38,17 @@ function draw() {
     "serial " + s.flags.serial + " / badge " + s.flags.badge + " / " + s.flags.leds + " LEDs lit / sticker " + s.flags.sticker;
   const v = s.modules[mod] || { wires: [] };
   const layout = (s.layouts && s.layouts[mod]) || { slots: [] };
-  const hp = handsProbe();
+  const hp = findPlayer(presence, "hands");
+  const probe = hp && hp.probe;
+  const charge = hp && hp.charge;
   renderBombFace(document.getElementById("grid"), layout, (el, slot, i) => {
     const w = v.wires[i] || {};
-    el.className = "slot" + (w.cut ? " cut" : "") + (hp && hp.module === mod && hp.cell === i ? " probed" : "");
+    const isProbed = probe && probe.module === mod && probe.cell === i;
+    const isCharging = charge && charge.module === mod && charge.cell === i;
+    el.className = "slot" + (w.cut ? " cut" : "") + (isProbed ? " probed" : "") + (isCharging ? " charging" : "");
     el.style.borderColor = SWATCH[w.colour] || "#333";
     el.innerHTML = "<div>[" + (i + 1) + "]<br>" + (w.colour || "") + (i === v.led_wire ? "<br><small>LED</small>" : "") + "</div>";
+    paintCharge(el, isCharging ? charge.progress : null);
   });
 }
 addEventListener("keydown", e => {
