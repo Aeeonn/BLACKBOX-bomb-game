@@ -312,6 +312,12 @@ function drawSeat(seat, index, total, w, h, ts) {
   if (seat.hasDetail && seat.gesture === "nod") bobY = Math.sin(ts / 90) * 5;
   if (seat.hasDetail && seat.gesture === "shake") wagX = Math.sin(ts / 70) * 6;
 
+  // T12: BOOK's console is a fixed prop at BOOK's seat, drawn behind the
+  // bust. It is pure WORLD geometry - the same empty card-slot shape for
+  // every viewer, always - so it cannot leak which card was last flashed
+  // (that stays EYES-only, via eyes.html's own #flash element, unchanged).
+  if (seat.role === "book") drawBookDesk(p, alpha);
+
   ctx.save();
   ctx.globalAlpha = alpha;
   ctx.translate(p.x, p.y);
@@ -339,5 +345,29 @@ function drawSeat(seat, index, total, w, h, ts) {
   ctx.font = "11px monospace";
   ctx.textAlign = "center";
   ctx.fillText(seat.role.toUpperCase(), p.x, p.y + 40);
+  ctx.restore();
+}
+
+// A small lectern/console below BOOK's seat: a flat board with three empty
+// card slots. Always the same shape, connected or not, pointing or not -
+// there is no card content drawn here at all, so this can never become a
+// second, unfiltered way to see what BOOK just flashed.
+function drawBookDesk(p, alpha) {
+  const w = 50, h = 16, top = p.y + 26;
+  ctx.save();
+  ctx.globalAlpha = Math.max(alpha, 0.35);
+  ctx.fillStyle = "#1a1a20";
+  ctx.strokeStyle = "#4a4a52";
+  ctx.lineWidth = 1.5;
+  ctx.beginPath();
+  ctx.rect(p.x - w / 2, top, w, h);
+  ctx.fill();
+  ctx.stroke();
+
+  ctx.strokeStyle = "#3a3a42";
+  ctx.lineWidth = 1;
+  for (let i = 0; i < 3; i++) {
+    ctx.strokeRect(p.x - w / 2 + 4 + i * 15, top + 3, 11, h - 6);
+  }
   ctx.restore();
 }

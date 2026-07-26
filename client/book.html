@@ -48,6 +48,17 @@ on("presence", m => { presence = m.payload; setPresence(m.payload); if (lastPayl
 // never carries per-slot data in the first place, so there is nothing here
 // that could leak. Reuses one .bombface-wrap per module across updates
 // rather than rebuilding the DOM every state tick.
+//
+// T12: clicking a module's shell points at it (module-level only - the
+// server drops any cell we send unless precise_pointing is on, which
+// nothing enables yet), so we don't pretend to track a cell locally either.
+// Clicking the module BOOK is already pointing at again clears it.
+function sendPoint(i) {
+  const bp = findPlayer(presence, "book");
+  const already = bp && bp.pointer && bp.pointer.module === i;
+  send({ type: "point", target: already ? {} : { module: i } });
+}
+
 function drawBookShells(payload) {
   const layouts = payload.layouts || [];
   const container = document.getElementById("bombfaces");
@@ -57,14 +68,18 @@ function drawBookShells(payload) {
   const hp = findPlayer(presence, "hands");
   const probe = hp && hp.probe;
   const charge = hp && hp.charge;
+  const bp = findPlayer(presence, "book");
+  const pointedModule = bp && bp.pointer ? bp.pointer.module : null;
   layouts.forEach((layout, i) => {
     let box = container.children[i];
     if (!box) {
       box = document.createElement("div");
-      box.className = "bombface-wrap";
+      box.className = "bombface-wrap pointable";
       box.innerHTML = '<div class="bombface-label"></div><div class="bombface"></div>';
+      box.onclick = () => sendPoint(i);
       container.appendChild(box);
     }
+    box.classList.toggle("pointed", i === pointedModule);
     const mv = payload.modules[i] || {};
     box.querySelector(".bombface-label").textContent =
       "Module " + (i + 1) + (mv.module ? " - " + mv.module : "") + (mv.solved ? " (solved)" : "");

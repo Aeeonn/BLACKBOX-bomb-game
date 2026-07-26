@@ -21,6 +21,8 @@ on("log", m => logLine(m.text));
 
 // SCOPE's shell: slot indices only, same as BOOK - SCOPE's own views() has no
 // per-slot colour or texture either, only the netlist already shown below.
+// T12: also highlights whichever module BOOK is currently pointing at -
+// read-only here, SCOPE never sends its own point messages.
 function drawScopeShells(payload) {
   const layouts = payload.layouts || [];
   const container = document.getElementById("bombfaces");
@@ -30,6 +32,8 @@ function drawScopeShells(payload) {
   const hp = findPlayer(presence, "hands");
   const probe = hp && hp.probe;
   const charge = hp && hp.charge;
+  const bp = findPlayer(presence, "book");
+  const pointedModule = bp && bp.pointer ? bp.pointer.module : null;
   layouts.forEach((layout, i) => {
     let box = container.children[i];
     if (!box) {
@@ -38,6 +42,7 @@ function drawScopeShells(payload) {
       box.innerHTML = '<div class="bombface-label"></div><div class="bombface"></div>';
       container.appendChild(box);
     }
+    box.classList.toggle("pointed", i === pointedModule);
     box.querySelector(".bombface-label").textContent = "Module " + (i + 1);
     renderBombFace(box.querySelector(".bombface"), layout, (el, slot, idx) => {
       const isProbed = probe && probe.module === i && probe.cell === idx;

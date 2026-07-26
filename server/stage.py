@@ -63,6 +63,11 @@ class Stage:
         # off, because watching the echoed hand would give the flip away
         # instantly.
         self.probe_echo: bool = True
+        # Match flag, default off (see AGENTS.md T12). BOOK's pointer resolves
+        # to a module by default; cell-level pointing would let BOOK issue
+        # complete instructions without the voice relay, so it stays off
+        # until the humans explicitly ask for it.
+        self.precise_pointing: bool = False
 
     def attach(self, role: str) -> None:
         a = self.avatars.get(role)
@@ -102,7 +107,18 @@ class Stage:
         a = self.avatars.get(role)
         if a is None:
             return
-        a.pointer = target
+        if target is None or "module" not in target:
+            a.pointer = None
+            return
+        # Module-level resolution by default, regardless of what a client
+        # sends: a client cannot elevate its own precision by including a
+        # "cell" the server doesn't allow. Precision is a match-wide flag,
+        # not a per-message client choice.
+        module = target["module"]
+        if self.precise_pointing and "cell" in target:
+            a.pointer = {"module": module, "cell": target["cell"]}
+        else:
+            a.pointer = {"module": module}
 
     def apply_probe(self, role: str, module: int, cell: int) -> None:
         """Record where HANDS' hand currently is on the bomb - module+cell

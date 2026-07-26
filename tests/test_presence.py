@@ -1,8 +1,9 @@
 
-"""T6/T9/T10: the presence leak test. As important as test_invariants.py -
-see AGENTS.md's presence filter matrix. HANDS must never receive yaw, pitch,
-gaze, gesture or pointer keys for OTHER players; every role (HANDS included)
-still gets connected/moving for everyone, and full detail for themselves.
+"""T6/T9/T10/T12: the presence leak test. As important as test_invariants.py
+- see AGENTS.md's presence filter matrix. HANDS must never receive yaw,
+pitch, gaze, gesture or pointer keys for OTHER players; every role (HANDS
+included) still gets connected/moving for everyone, and full detail for
+themselves.
 
 T9 adds HANDS' probe echo (module+cell indices only, gated by probe_echo) -
 the one presence field visible to every role including HANDS' own entry.
@@ -10,6 +11,10 @@ the one presence field visible to every role including HANDS' own entry.
 T10 adds the commit-charge ring: visible to every role unconditionally (no
 flag - hard rule 12 says it must never be local-only), with progress computed
 live from the server's own clock.
+
+T12 adds BOOK's (or anyone but HANDS') pointer resolution: module-level by
+default regardless of what a client sends, cell-level only when the match's
+precise_pointing flag is on.
 """
 import asyncio
 
@@ -325,4 +330,96 @@ def test_rearm_clears_a_stale_charge():
 
     seen_by_eyes = {e["role"]: e for e in room.stage.presence("eyes")["players"]}
     assert seen_by_eyes["hands"]["charge"] is None
+
+
+def test_pointer_resolves_to_module_only_by_default():
+    stage = Stage()
+    stage.attach("book")
+    stage.apply_point("book", {"module": 2, "cell": 5})  # client sends a cell anyway
+
+    entry = next(e for e in stage.presence("eyes")["players"] if e["role"] == "book")
+    assert entry["pointer"] == {"module": 2}, \
+        "a client-supplied cell must be dropped when precise_pointing is off"
+
+
+def test_pointer_includes_cell_when_precise_pointing_is_on():
+    stage = Stage()
+    stage.attach("book")
+    stage.precise_pointing = True
+    stage.apply_point("book", {"module": 2, "cell": 5})
+
+    entry = next(e for e in stage.presence("eyes")["players"] if e["role"] == "book")
+    assert entry["pointer"] == {"module": 2, "cell": 5}
+
+
+def test_pointer_without_a_cell_is_unaffected_by_precise_pointing():
+    stage = Stage()
+    stage.attach("book")
+    stage.precise_pointing = True
+    stage.apply_point("book", {"module": 3})
+
+    entry = next(e for e in stage.presence("eyes")["players"] if e["role"] == "book")
+    assert entry["pointer"] == {"module": 3}
+
+
+def test_pointer_with_no_module_clears_to_none():
+    stage = Stage()
+    stage.attach("book")
+    stage.apply_point("book", {"module": 1})
+    stage.apply_point("book", {})  # no module key at all - e.g. pointer left the bomb
+
+    entry = next(e for e in stage.presence("eyes")["players"] if e["role"] == "book")
+    assert entry["pointer"] is None
+
+
+def test_hands_still_cannot_point_even_with_precise_pointing_on():
+    stage = Stage()
+    stage.attach("hands")
+    stage.precise_pointing = True
+    stage.apply_point("hands", {"module": 0, "cell": 0})
+
+    entry = next(e for e in stage.presence("eyes")["players"] if e["role"] == "hands")
+    assert entry["pointer"] is None
+
+
+def test_room_dispatches_point_with_module_only_default():
+    room = Room("LLLL")
+    book, eyes = _DummySocket(), _DummySocket()
+    room.attach("book", book)
+    room.attach("eyes", eyes)
+
+    asyncio.run(room.handle("book", book,
+        {"type": "point", "target": {"module": 1, "cell": 4}}))
+
+    seen = {e["role"]: e for e in room.stage.presence("eyes")["players"]}
+    assert seen["book"]["pointer"] == {"module": 1}
+
+
+def test_room_start_can_enable_precise_pointing():
+    room = Room("MMMM")
+    book, eyes = _DummySocket(), _DummySocket()
+    room.attach("book", book)
+    room.attach("eyes", eyes)
+    asyncio.run(room.start(modules=1, seed=1, precise_pointing=True))
+
+    asyncio.run(room.handle("book", book,
+        {"type": "point", "target": {"module": 0, "cell": 2}}))
+
+    seen = {e["role"]: e for e in room.stage.presence("eyes")["players"]}
+    assert seen["book"]["pointer"] == {"module": 0, "cell": 2}
+
+
+def test_rearm_clears_a_stale_pointer():
+    room = Room("NNNN")
+    book, eyes = _DummySocket(), _DummySocket()
+    room.attach("book", book)
+    room.attach("eyes", eyes)
+    asyncio.run(room.start(modules=1, seed=1))
+    asyncio.run(room.handle("book", book, {"type": "point", "target": {"module": 0}}))
+    room.bomb.phase = "won"
+
+    asyncio.run(room.start(modules=1, seed=2))  # REARM
+
+    seen_by_eyes = {e["role"]: e for e in room.stage.presence("eyes")["players"]}
+    assert seen_by_eyes["book"]["pointer"] is None
 

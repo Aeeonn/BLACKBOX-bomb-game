@@ -7,6 +7,7 @@
 <div class="flags" id="flags"></div>
 <div class="hud"><div id="time">--:--</div><div class="strikes" id="strikes"></div><div id="phase"></div></div>
 <p style="color:#6b6b6b;font-size:13px">TAB switches module. You are DEAFENED in Discord.</p>
+<p class="pointer-hint" id="pointerhint"></p>
 <div class="bombface" id="grid"></div>
 <div id="log"></div>
 <script type="module">
@@ -41,7 +42,19 @@ function draw() {
   const hp = findPlayer(presence, "hands");
   const probe = hp && hp.probe;
   const charge = hp && hp.charge;
-  renderBombFace(document.getElementById("grid"), layout, (el, slot, i) => {
+  // T12: BOOK's pointer is module-level only. EYES only shows one module at
+  // a time (TAB to switch), so a per-slot highlight doesn't apply here the
+  // way it does on BOOK/SCOPE's all-modules-at-once shells - a text hint
+  // plus a border on the grid once you've tabbed to the right module does
+  // the same job.
+  const bp = findPlayer(presence, "book");
+  const pointedModule = bp && bp.pointer ? bp.pointer.module : null;
+  const hint = document.getElementById("pointerhint");
+  hint.textContent = pointedModule == null ? "" : "BOOK is pointing at module " + (pointedModule + 1);
+  hint.className = "pointer-hint" + (pointedModule != null ? " active" : "");
+  const grid = document.getElementById("grid");
+  grid.classList.toggle("pointed", pointedModule === mod);
+  renderBombFace(grid, layout, (el, slot, i) => {
     const w = v.wires[i] || {};
     const isProbed = probe && probe.module === mod && probe.cell === i;
     const isCharging = charge && charge.module === mod && charge.cell === i;

@@ -47,3 +47,14 @@ button:hover { background: #2c2c2c; }
 .bombface .slot.charging { border-color: var(--hot); }
 .bombface .slot .charge-fill { position: absolute; left: 0; right: 0; bottom: 0; height: 0;
                                 background: rgba(200,64,47,.45); pointer-events: none; }
+/* T12: BOOK's pointer is module-level only, so it highlights the whole
+   module box rather than one slot - #a678b0 matches BOOK's avatar colour on
+   the shared stage, so the tie between "the purple bust" and "the purple
+   outline" is visible without reading a label. */
+.bombface-wrap.pointable { cursor: pointer; }
+.bombface-wrap.pointable:hover { background: rgba(166,120,176,.06); }
+.bombface-wrap.pointed { outline: 2px solid #a678b0; outline-offset: 5px; border-radius: 2px; }
+.bombface-wrap.pointed .bombface-label { color: #a678b0; }
+.bombface.pointed { outline: 2px solid #a678b0; outline-offset: 3px; }
+.pointer-hint { color: var(--dim); font-size: 13px; margin: 4px 0 10px; }
+.pointer-hint.active { color: #a678b0; }
