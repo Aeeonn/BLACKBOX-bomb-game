@@ -6,6 +6,7 @@
 <div class="hud"><div id="time">--:--</div><div class="strikes" id="strikes"></div><div id="phase"></div></div>
 <p style="color:#6b6b6b;font-size:13px">You are MUTED in Discord. Nod, wave, and use the cards. 2s cooldown.</p>
 <div class="cards" id="cards"></div>
+<div id="bombfaces"></div>
 <p style="margin-top:14px"><button id="start">ARM THE BOMB</button>
   <a id="manual" style="color:#e8e4d8;margin-left:14px" target="_blank">OPEN MANUAL</a></p>
 <iframe id="frame" style="width:100%;height:60vh;margin-top:12px;background:#fdfaf2;border:1px solid #444"></iframe>
@@ -15,6 +16,7 @@ import { connect, on, send, logLine, fmtTime, ROOM, ROLE } from "/common/net.js"
 import { updateOverlay } from "/common/overlay.js";
 import { updateTimerAudio } from "/common/timer-audio.js";
 import { init as initStage, setPresence, setBomb } from "/common/stage.js";
+import { renderBombFace } from "/common/bombface.js";
 const CARDS = ["STOP","GO","YES","NO","WAIT","AGAIN","1","2","3","4","LEFT","RIGHT"];
 let cooling = false;
 const wrap = document.getElementById("cards");
@@ -40,6 +42,35 @@ function arm() {
 document.getElementById("start").onclick = arm;
 initStage(document.getElementById("stage"), ROLE);
 on("presence", m => setPresence(m.payload));
+
+// BOOK's shell: slot indices only, no colour or texture - BOOK's own views()
+// never carries per-slot data in the first place, so there is nothing here
+// that could leak. Reuses one .bombface-wrap per module across updates
+// rather than rebuilding the DOM every state tick.
+function drawBookShells(payload) {
+  const layouts = payload.layouts || [];
+  const container = document.getElementById("bombfaces");
+  while (container.children.length > layouts.length) {
+    container.removeChild(container.lastChild);
+  }
+  layouts.forEach((layout, i) => {
+    let box = container.children[i];
+    if (!box) {
+      box = document.createElement("div");
+      box.className = "bombface-wrap";
+      box.innerHTML = '<div class="bombface-label"></div><div class="bombface"></div>';
+      container.appendChild(box);
+    }
+    const mv = payload.modules[i] || {};
+    box.querySelector(".bombface-label").textContent =
+      "Module " + (i + 1) + (mv.module ? " - " + mv.module : "") + (mv.solved ? " (solved)" : "");
+    renderBombFace(box.querySelector(".bombface"), layout, (el, slot, idx) => {
+      el.className = "slot";
+      el.textContent = String(idx + 1);
+    });
+  });
+}
+
 on("state", s => {
   document.getElementById("time").textContent = fmtTime(s.payload.time_left);
   document.getElementById("strikes").textContent = "X".repeat(s.payload.strikes);
@@ -49,6 +80,7 @@ on("state", s => {
   updateOverlay(s.payload.phase, arm);
   updateTimerAudio(s.payload.time_left, s.payload.phase);
   setBomb(s.payload);
+  drawBookShells(s.payload);
 });
 on("log", m => logLine(m.text));
 connect();

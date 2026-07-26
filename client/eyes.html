@@ -7,12 +7,13 @@
 <div class="flags" id="flags"></div>
 <div class="hud"><div id="time">--:--</div><div class="strikes" id="strikes"></div><div id="phase"></div></div>
 <p style="color:#6b6b6b;font-size:13px">TAB switches module. You are DEAFENED in Discord.</p>
-<div class="grid" id="grid"></div>
+<div class="bombface" id="grid"></div>
 <div id="log"></div>
 <script type="module">
 import { connect, on, logLine, fmtTime, ROLE } from "/common/net.js";
 import { updateOverlay } from "/common/overlay.js";
 import { init as initStage, setPresence, setBomb } from "/common/stage.js";
+import { renderBombFace } from "/common/bombface.js";
 let mod = 0, state = null;
 const SWATCH = { red:"#b33", blue:"#36c", yellow:"#dc3", white:"#eee", black:"#000", green:"#3a3" };
 
@@ -36,13 +37,12 @@ function draw() {
   document.getElementById("flags").textContent =
     "serial " + s.flags.serial + " / badge " + s.flags.badge + " / " + s.flags.leds + " LEDs lit / sticker " + s.flags.sticker;
   const v = s.modules[mod] || { wires: [] };
-  const g = document.getElementById("grid"); g.innerHTML = "";
-  v.wires.forEach((w, i) => {
-    const d = document.createElement("div");
-    d.className = "cell" + (w.cut ? " cut" : "");
-    d.style.borderColor = SWATCH[w.colour] || "#333";
-    d.innerHTML = "<div>[" + (i + 1) + "]<br>" + w.colour + (i === v.led_wire ? "<br><small>LED</small>" : "") + "</div>";
-    g.appendChild(d);
+  const layout = (s.layouts && s.layouts[mod]) || { slots: [] };
+  renderBombFace(document.getElementById("grid"), layout, (el, slot, i) => {
+    const w = v.wires[i] || {};
+    el.className = "slot" + (w.cut ? " cut" : "");
+    el.style.borderColor = SWATCH[w.colour] || "#333";
+    el.innerHTML = "<div>[" + (i + 1) + "]<br>" + (w.colour || "") + (i === v.led_wire ? "<br><small>LED</small>" : "") + "</div>";
   });
 }
 addEventListener("keydown", e => {

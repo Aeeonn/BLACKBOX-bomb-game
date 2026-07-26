@@ -31,3 +31,13 @@ button:hover { background: #2c2c2c; }
 .stagewrap { margin: 10px 0 18px; }
 #stage { width: 100%; max-width: 760px; height: auto; aspect-ratio: 900 / 320;
          background: #111318; border: 1px solid #333; display: block; }
+.bombface-wrap { margin: 8px 0 18px; }
+.bombface-label { color: var(--dim); font-size: 12px; margin-bottom: 6px; }
+.bombface { position: relative; width: 100%; max-width: 640px; height: 120px;
+            background: #191919; border: 1px solid #333; }
+.bombface .slot { position: absolute; transform: translate(-50%, -50%);
+                  width: 84px; height: 84px; border: 2px solid #333; display: flex;
+                  align-items: center; justify-content: center; font-size: 12px;
+                  text-align: center; padding: 4px; background: #1f1f1f; }
+.bombface .slot.sel { border-color: var(--fg); background: #2a2a2a; }
+.bombface .slot.cut { opacity: .35; text-decoration: line-through; }
