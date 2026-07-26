@@ -10,10 +10,11 @@
 <div id="log"></div>
 <script type="module">
 import { connect, on, logLine, fmtTime } from "/common/net.js";
+import { updateOverlay } from "/common/overlay.js";
 let mod = 0, state = null;
 const SWATCH = { red:"#b33", blue:"#36c", yellow:"#dc3", white:"#eee", black:"#000", green:"#3a3" };
 
-on("state", m => { state = m.payload; draw(); });
+on("state", m => { state = m.payload; draw(); updateOverlay(state.phase); });
 on("log", m => logLine(m.text));
 on("flash", m => {
   const f = document.getElementById("flash");

@@ -11,6 +11,7 @@
 <div id="log"></div>
 <script type="module">
 import { connect, on, send, logLine, fmtTime, ROOM } from "/common/net.js";
+import { updateOverlay } from "/common/overlay.js";
 const CARDS = ["STOP","GO","YES","NO","WAIT","AGAIN","1","2","3","4","LEFT","RIGHT"];
 let cooling = false;
 const wrap = document.getElementById("cards");
@@ -26,16 +27,21 @@ CARDS.forEach(c => {
   wrap.appendChild(b);
 });
 document.getElementById("manual").href = "/manual/" + ROOM;
-document.getElementById("start").onclick = () => {
+// Shared by the initial ARM button and the overlay's REARM button - the
+// server always builds a fresh Bomb here, and ignores this while a round
+// is still running, so it's safe to wire to both.
+function arm() {
   send({ type: "start", modules: 2, seconds: 300 });
   setTimeout(() => { document.getElementById("frame").src = "/manual/" + ROOM; }, 400);
-};
+}
+document.getElementById("start").onclick = arm;
 on("state", s => {
   document.getElementById("time").textContent = fmtTime(s.payload.time_left);
   document.getElementById("strikes").textContent = "X".repeat(s.payload.strikes);
   const p = document.getElementById("phase");
   p.textContent = s.payload.phase === "running" ? "" : s.payload.phase.toUpperCase();
   p.className = s.payload.phase;
+  updateOverlay(s.payload.phase, arm);
 });
 on("log", m => logLine(m.text));
 connect();

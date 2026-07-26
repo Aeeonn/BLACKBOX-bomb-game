@@ -63,7 +63,12 @@ class Room:
             await self.send(role, {"type": "log", "text": text})
 
     async def start(self, seed=None, modules: int = 2, seconds: float = 300.0) -> None:
-        self.bomb = Bomb(seed if seed is not None else random.randrange(10000),
+        # Refuse to clobber a bomb that's still running - REARM (or a stray
+        # extra ARM click) may only replace a bomb that hasn't been created
+        # yet or has already ended in "won"/"lost".
+        if self.bomb is not None and self.bomb.phase == "running":
+            return
+        self.bomb = Bomb(seed if seed is not None else random.randrange(2 ** 31),
                          module_count=modules, seconds=seconds)
         await self.log("Bomb armed. Seed %d." % self.bomb.seed)
         if self.task is None or self.task.done():

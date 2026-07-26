@@ -14,9 +14,10 @@
 <div id="log"></div>
 <script type="module">
 import { connect, on, send, logLine, fmtTime, holdButton } from "/common/net.js";
+import { updateOverlay } from "/common/overlay.js";
 let mod = 0, cell = 0, state = null;
 
-on("state", m => { state = m.payload; draw(); });
+on("state", m => { state = m.payload; draw(); updateOverlay(state.phase); });
 on("log", m => logLine(m.text));
 on("error", m => logLine("ERROR " + m.text));
 on("probe_result", m => {

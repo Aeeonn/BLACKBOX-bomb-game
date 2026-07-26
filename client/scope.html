@@ -9,6 +9,7 @@
 <div id="log"></div>
 <script type="module">
 import { connect, on, logLine, fmtTime } from "/common/net.js";
+import { updateOverlay } from "/common/overlay.js";
 on("log", m => logLine(m.text));
 on("state", s => {
   const p = s.payload;
@@ -20,6 +21,7 @@ on("state", s => {
     "module " + (i + 1) + ": " + m.count + " pads, nets " +
     (m.nets && m.nets.length ? m.nets.map(n => "(" + (n[0]+1) + "-" + (n[1]+1) + ")").join(" ") : "none")
   ).join("\n");
+  updateOverlay(p.phase);
 });
 connect();
 </script>

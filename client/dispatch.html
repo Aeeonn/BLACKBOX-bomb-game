@@ -7,11 +7,13 @@
 <div id="log"></div>
 <script type="module">
 import { connect, on, logLine, fmtTime } from "/common/net.js";
+import { updateOverlay } from "/common/overlay.js";
 on("log", m => logLine(m.text));
 on("state", s => {
   document.getElementById("time").textContent = fmtTime(s.payload.time_left);
   document.getElementById("strikes").textContent = "X".repeat(s.payload.strikes);
   document.getElementById("phase").textContent = s.payload.phase === "running" ? "" : s.payload.phase.toUpperCase();
+  updateOverlay(s.payload.phase);
 });
 connect();
 </script>

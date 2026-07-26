@@ -22,3 +22,9 @@ button:hover { background: #2c2c2c; }
          background: #000; color: #fff; font-size: 22vw; letter-spacing: 8px; z-index: 99; }
 .flags { color: var(--dim); font-size: 13px; margin-bottom: 10px; }
 .won { color: var(--ok); } .lost { color: var(--hot); }
+#overlay.show { position: fixed; inset: 0; z-index: 90; display: flex; flex-direction: column;
+                align-items: center; justify-content: center; gap: 28px; background: rgba(0,0,0,.88); }
+#overlay .overlay-label { font-size: 12vw; letter-spacing: 10px; }
+#overlay.won .overlay-label { color: var(--ok); }
+#overlay.lost .overlay-label { color: var(--hot); }
+#overlay .rearm { font-size: 22px; padding: 16px 40px; }
