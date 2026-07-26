@@ -99,7 +99,8 @@ class Room:
         for role in list(self.sockets):
             await self.send(role, {"type": "log", "text": text})
 
-    async def start(self, seed=None, modules: int = 2, seconds: float = 300.0) -> None:
+    async def start(self, seed=None, modules: int = 2, seconds: float = 300.0,
+                     probe_echo: bool = True) -> None:
         # Refuse to clobber a bomb that's still running - REARM (or a stray
         # extra ARM click) may only replace a bomb that hasn't been created
         # yet or has already ended in "won"/"lost".
@@ -108,6 +109,10 @@ class Room:
         self.bomb = Bomb(seed if seed is not None else random.randrange(2 ** 31),
                          module_count=modules, seconds=seconds,
                          roles=set(self.sockets.keys()))
+        self.stage.probe_echo = probe_echo
+        # A stale probe position from the previous round could momentarily
+        # point at a slot that doesn't exist in the new bomb's modules.
+        self.stage.avatars["hands"].probe = None
         await self.log("Bomb armed. Seed %d." % self.bomb.seed)
         if self.task is None or self.task.done():
             self.task = asyncio.create_task(self._loop())
@@ -131,7 +136,8 @@ class Room:
         if kind == "start":
             await self.start(seed=msg.get("seed"),
                              modules=int(msg.get("modules", 2)),
-                             seconds=float(msg.get("seconds", 300)))
+                             seconds=float(msg.get("seconds", 300)),
+                             probe_echo=bool(msg.get("probe_echo", True)))
 
         elif kind == "act" and self.bomb is not None:
             idx = int(msg.get("module", 0))
@@ -144,7 +150,11 @@ class Room:
 
         elif kind == "probe" and self.bomb is not None:
             idx = int(msg.get("module", 0))
-            data = self.bomb.inspect(role, idx, {"cell": msg.get("cell", 0)})
+            cell = int(msg.get("cell", 0))
+            # Only the indices go to Stage - never `data` (the inspect()
+            # result below), which is what keeps the descriptor text unicast.
+            self.stage.apply_probe(role, idx, cell)
+            data = self.bomb.inspect(role, idx, {"cell": cell})
             await self.send(role, {"type": "probe_result", "module": idx, "data": data})
 
         elif kind == "flash" and role == "book":

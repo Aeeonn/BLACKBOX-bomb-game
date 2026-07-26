@@ -14,11 +14,11 @@ import { connect, on, logLine, fmtTime, ROLE } from "/common/net.js";
 import { updateOverlay } from "/common/overlay.js";
 import { init as initStage, setPresence, setBomb } from "/common/stage.js";
 import { renderBombFace } from "/common/bombface.js";
-let mod = 0, state = null;
+let mod = 0, state = null, presence = null;
 const SWATCH = { red:"#b33", blue:"#36c", yellow:"#dc3", white:"#eee", black:"#000", green:"#3a3" };
 
 initStage(document.getElementById("stage"), ROLE);
-on("presence", m => setPresence(m.payload));
+on("presence", m => { presence = m.payload; setPresence(m.payload); draw(); });
 on("state", m => { state = m.payload; draw(); updateOverlay(state.phase); setBomb(state); });
 on("log", m => logLine(m.text));
 on("flash", m => {
@@ -26,6 +26,11 @@ on("flash", m => {
   f.textContent = m.card; f.style.display = "flex";
   setTimeout(() => { f.style.display = "none"; }, 1200);
 });
+
+function handsProbe() {
+  const p = presence && presence.players.find(x => x.role === "hands");
+  return (p && p.probe) || null;
+}
 
 function draw() {
   const s = state; if (!s) return;
@@ -38,9 +43,10 @@ function draw() {
     "serial " + s.flags.serial + " / badge " + s.flags.badge + " / " + s.flags.leds + " LEDs lit / sticker " + s.flags.sticker;
   const v = s.modules[mod] || { wires: [] };
   const layout = (s.layouts && s.layouts[mod]) || { slots: [] };
+  const hp = handsProbe();
   renderBombFace(document.getElementById("grid"), layout, (el, slot, i) => {
     const w = v.wires[i] || {};
-    el.className = "slot" + (w.cut ? " cut" : "");
+    el.className = "slot" + (w.cut ? " cut" : "") + (hp && hp.module === mod && hp.cell === i ? " probed" : "");
     el.style.borderColor = SWATCH[w.colour] || "#333";
     el.innerHTML = "<div>[" + (i + 1) + "]<br>" + (w.colour || "") + (i === v.led_wire ? "<br><small>LED</small>" : "") + "</div>";
   });

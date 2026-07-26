@@ -1,8 +1,11 @@
 
-"""T6: the presence leak test. As important as test_invariants.py - see
+"""T6/T9: the presence leak test. As important as test_invariants.py - see
 AGENTS.md's presence filter matrix. HANDS must never receive yaw, pitch,
 gaze, gesture or pointer keys for OTHER players; every role (HANDS included)
 still gets connected/moving for everyone, and full detail for themselves.
+
+T9 adds HANDS' probe echo (module+cell indices only, gated by probe_echo) -
+the one presence field visible to every role including HANDS' own entry.
 """
 import asyncio
 
@@ -110,3 +113,99 @@ def test_room_dispatches_pose_gesture_point_into_stage():
     assert seen_by_book["eyes"]["gaze"] == "bomb"
     assert seen_by_book["eyes"]["gesture"] == "nod"
     assert seen_by_book["hands"]["pointer"] is None  # hands' point() call was a no-op
+
+
+def test_probe_echo_visible_to_every_role_including_hands_own():
+    stage = Stage()
+    for role in ("hands", "eyes", "book", "scope", "dispatch"):
+        stage.attach(role)
+    stage.apply_probe("hands", module=1, cell=3)
+
+    for viewer in ("hands", "eyes", "book", "scope", "dispatch"):
+        entry = next(e for e in stage.presence(viewer)["players"] if e["role"] == "hands")
+        assert entry["probe"] == {"module": 1, "cell": 3}, \
+            "viewer %r did not see the probe echo" % viewer
+
+
+def test_probe_only_tracks_the_hands_role():
+    stage = Stage()
+    stage.attach("hands")
+    stage.attach("eyes")
+    stage.apply_probe("eyes", module=0, cell=0)  # must be a silent no-op
+
+    entry = next(e for e in stage.presence("book")["players"] if e["role"] == "eyes")
+    assert "probe" not in entry  # only the hands row ever carries this key
+
+
+def test_probe_echo_shape_never_contains_descriptor_text():
+    stage = Stage()
+    stage.attach("hands")
+    stage.apply_probe("hands", module=0, cell=2)
+
+    entry = next(e for e in stage.presence("eyes")["players"] if e["role"] == "hands")
+    assert set(entry["probe"].keys()) == {"module", "cell"}
+    assert "text" not in entry["probe"]
+
+
+def test_probe_echo_flag_hides_the_field_for_everyone_when_off():
+    stage = Stage()
+    stage.attach("hands")
+    stage.probe_echo = False
+    stage.apply_probe("hands", module=0, cell=2)
+
+    for viewer in ("hands", "eyes", "book", "scope", "dispatch"):
+        entry = next(e for e in stage.presence(viewer)["players"] if e["role"] == "hands")
+        assert "probe" not in entry, "viewer %r saw the probe echo while probe_echo=False" % viewer
+
+
+def test_probe_clears_on_hands_disconnect():
+    stage = Stage()
+    stage.attach("hands")
+    stage.apply_probe("hands", module=0, cell=1)
+    stage.detach("hands")
+
+    entry = next(e for e in stage.presence("eyes")["players"] if e["role"] == "hands")
+    assert entry["probe"] is None
+
+
+def test_room_dispatches_probe_into_stage_and_it_echoes_to_other_roles():
+    room = Room("GGGG")
+    hands, eyes, book = _DummySocket(), _DummySocket(), _DummySocket()
+    room.attach("hands", hands)
+    room.attach("eyes", eyes)
+    room.attach("book", book)
+    asyncio.run(room.start(modules=1, seed=1))
+
+    asyncio.run(room.handle("hands", hands, {"type": "probe", "module": 0, "cell": 1}))
+
+    seen_by_eyes = {e["role"]: e for e in room.stage.presence("eyes")["players"]}
+    assert seen_by_eyes["hands"]["probe"] == {"module": 0, "cell": 1}
+
+
+def test_room_start_can_disable_probe_echo():
+    room = Room("HHHH")
+    hands, eyes = _DummySocket(), _DummySocket()
+    room.attach("hands", hands)
+    room.attach("eyes", eyes)
+    asyncio.run(room.start(modules=1, seed=1, probe_echo=False))
+
+    asyncio.run(room.handle("hands", hands, {"type": "probe", "module": 0, "cell": 0}))
+
+    seen_by_eyes = {e["role"]: e for e in room.stage.presence("eyes")["players"]}
+    assert "probe" not in seen_by_eyes["hands"]
+
+
+def test_rearm_clears_a_stale_probe_position():
+    room = Room("IIII")
+    hands, eyes = _DummySocket(), _DummySocket()
+    room.attach("hands", hands)
+    room.attach("eyes", eyes)
+    asyncio.run(room.start(modules=1, seed=1))
+    asyncio.run(room.handle("hands", hands, {"type": "probe", "module": 0, "cell": 2}))
+    room.bomb.phase = "won"
+
+    asyncio.run(room.start(modules=1, seed=2))  # REARM
+
+    seen_by_eyes = {e["role"]: e for e in room.stage.presence("eyes")["players"]}
+    assert seen_by_eyes["hands"]["probe"] is None
+

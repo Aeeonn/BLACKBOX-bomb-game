@@ -29,6 +29,7 @@ class Avatar:
     gesture: str | None = None
     gesture_at: float = 0.0
     pointer: dict | None = None
+    probe: dict | None = None
     last_pose_at: float = 0.0
 
     @property
@@ -47,6 +48,11 @@ class Stage:
         # so every role's avatar always renders (greyed) even before anyone
         # has ever taken that seat. See AGENTS.md hard rule 4.
         self.avatars: dict[str, Avatar] = {role: Avatar(role) for role in ROLES}
+        # Match flag, default on (see AGENTS.md T9/T18). Gates whether HANDS'
+        # probed cell is echoed to anyone at all. T18 (Mirror) will turn this
+        # off, because watching the echoed hand would give the flip away
+        # instantly.
+        self.probe_echo: bool = True
 
     def attach(self, role: str) -> None:
         a = self.avatars.get(role)
@@ -60,7 +66,7 @@ class Stage:
             return
         a.connected = False
         a.yaw = a.pitch = 0.0
-        a.gaze = a.gesture = a.pointer = None
+        a.gaze = a.gesture = a.pointer = a.probe = None
 
     def apply_pose(self, role: str, yaw: float, pitch: float, gaze: str | None) -> None:
         a = self.avatars.get(role)
@@ -88,12 +94,29 @@ class Stage:
             return
         a.pointer = target
 
+    def apply_probe(self, role: str, module: int, cell: int) -> None:
+        """Record where HANDS' hand currently is on the bomb - module+cell
+        indices ONLY. The descriptor text never reaches this class at all
+        (callers must pass the raw incoming message args, never the result of
+        Bomb.inspect()), which is what makes it safe for presence() to
+        broadcast this to every role. See AGENTS.md T9.
+        """
+        if role != "hands":
+            return
+        a = self.avatars.get(role)
+        if a is None:
+            return
+        a.probe = {"module": module, "cell": cell}
+
     def presence(self, role: str) -> dict:
         """Per-role filtered presence payload. See AGENTS.md's presence filter
         matrix: HANDS never receives yaw/pitch/gaze/gesture/pointer keys for
         OTHER players - those keys are omitted entirely, not just nulled out.
         A player always receives their own fields at full detail, regardless
-        of which role they are.
+        of which role they are. HANDS' probe cell (module+cell indices, never
+        the descriptor text) is the one exception to the "hidden from HANDS'
+        view of others" rule: it is visible to every role, including HANDS'
+        own entry, per the matrix - gated only by probe_echo.
         """
         players = []
         for other_role, a in self.avatars.items():
@@ -104,5 +127,7 @@ class Stage:
                 entry["gaze"] = a.gaze
                 entry["gesture"] = a.live_gesture()
                 entry["pointer"] = a.pointer
+            if other_role == "hands" and self.probe_echo:
+                entry["probe"] = a.probe
             players.append(entry)
         return {"players": players}

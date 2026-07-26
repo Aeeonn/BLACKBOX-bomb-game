@@ -40,8 +40,14 @@ function arm() {
   setTimeout(() => { document.getElementById("frame").src = "/manual/" + ROOM; }, 400);
 }
 document.getElementById("start").onclick = arm;
+let lastPayload = null, presence = null;
 initStage(document.getElementById("stage"), ROLE);
-on("presence", m => setPresence(m.payload));
+on("presence", m => { presence = m.payload; setPresence(m.payload); if (lastPayload) drawBookShells(lastPayload); });
+
+function handsProbe() {
+  const p = presence && presence.players.find(x => x.role === "hands");
+  return (p && p.probe) || null;
+}
 
 // BOOK's shell: slot indices only, no colour or texture - BOOK's own views()
 // never carries per-slot data in the first place, so there is nothing here
@@ -53,6 +59,7 @@ function drawBookShells(payload) {
   while (container.children.length > layouts.length) {
     container.removeChild(container.lastChild);
   }
+  const hp = handsProbe();
   layouts.forEach((layout, i) => {
     let box = container.children[i];
     if (!box) {
@@ -65,7 +72,7 @@ function drawBookShells(payload) {
     box.querySelector(".bombface-label").textContent =
       "Module " + (i + 1) + (mv.module ? " - " + mv.module : "") + (mv.solved ? " (solved)" : "");
     renderBombFace(box.querySelector(".bombface"), layout, (el, slot, idx) => {
-      el.className = "slot";
+      el.className = "slot" + (hp && hp.module === i && hp.cell === idx ? " probed" : "");
       el.textContent = String(idx + 1);
     });
   });
@@ -80,6 +87,7 @@ on("state", s => {
   updateOverlay(s.payload.phase, arm);
   updateTimerAudio(s.payload.time_left, s.payload.phase);
   setBomb(s.payload);
+  lastPayload = s.payload;
   drawBookShells(s.payload);
 });
 on("log", m => logLine(m.text));

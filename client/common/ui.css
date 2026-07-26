@@ -41,3 +41,6 @@ button:hover { background: #2c2c2c; }
                   text-align: center; padding: 4px; background: #1f1f1f; }
 .bombface .slot.sel { border-color: var(--fg); background: #2a2a2a; }
 .bombface .slot.cut { opacity: .35; text-decoration: line-through; }
+.bombface .slot.probed { border-color: #d9a441; box-shadow: 0 0 0 2px rgba(217,164,65,.35); }
+.bombface .slot.probed::after { content: "\270B"; position: absolute; top: -11px; right: -9px;
+                                 font-size: 15px; }
