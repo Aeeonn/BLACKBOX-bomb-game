@@ -12,6 +12,7 @@
 <script type="module">
 import { connect, on, send, logLine, fmtTime, ROOM } from "/common/net.js";
 import { updateOverlay } from "/common/overlay.js";
+import { updateTimerAudio } from "/common/timer-audio.js";
 const CARDS = ["STOP","GO","YES","NO","WAIT","AGAIN","1","2","3","4","LEFT","RIGHT"];
 let cooling = false;
 const wrap = document.getElementById("cards");
@@ -42,6 +43,7 @@ on("state", s => {
   p.textContent = s.payload.phase === "running" ? "" : s.payload.phase.toUpperCase();
   p.className = s.payload.phase;
   updateOverlay(s.payload.phase, arm);
+  updateTimerAudio(s.payload.time_left, s.payload.phase);
 });
 on("log", m => logLine(m.text));
 connect();
