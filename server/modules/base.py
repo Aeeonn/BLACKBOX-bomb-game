@@ -32,6 +32,27 @@ class Views:
                 "book": self.book, "scope": self.scope or {}}.get(role, {})
 
 
+@dataclass
+class Slot:
+    """One point in a module's face. WORLD data - position only, never a property.
+
+    See AGENTS.md hard rule 3: no colour, texture or label belongs here. If you
+    want to describe what a slot *looks or feels like*, that goes in views().
+    """
+    idx: int
+    kind: str          # "wire" | "button" | "dial" | "tile" | "vent"
+    x: float           # 0..1 across the module's face
+    y: float           # 0..1 down the module's face
+
+
+@dataclass
+class Layout:
+    """A module's spatial geometry. Identical for every role - see layout()."""
+    w: int              # face grid width
+    h: int              # face grid height
+    slots: list[Slot]
+
+
 REGISTRY: dict[str, type["Module"]] = {}
 
 
@@ -55,6 +76,13 @@ class Module(ABC):
     @abstractmethod
     def views(self) -> Views:
         """Role-filtered state. NEVER leak cross-role fields. See tests/test_invariants.py."""
+
+    @abstractmethod
+    def layout(self) -> Layout:
+        """WORLD geometry: slot positions only. Identical for every role - see
+        tests/test_layout.py. No colour, texture or label may appear here;
+        that belongs in views() instead.
+        """
 
     @abstractmethod
     def act(self, role: str, action: dict) -> Result:

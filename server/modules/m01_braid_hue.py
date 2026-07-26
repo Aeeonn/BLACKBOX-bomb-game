@@ -9,7 +9,7 @@ Three-key rule: satisfied. No two roles can solve this without the third.
 import html
 import random
 
-from .base import Module, Result, Views, register
+from .base import Layout, Module, Result, Slot, Views, register
 
 TEXTURES = ["braided", "ribbed", "smooth", "frayed", "sticky", "glassy"]
 COLOURS = ["red", "blue", "yellow", "white", "black", "green"]
@@ -130,6 +130,13 @@ class BraidHue(Module):
             scope={"kind": "netlist", "count": len(self.wires),
                    "nets": self.nets, "solved": self.solved},
         )
+
+    def layout(self) -> Layout:
+        # One row of evenly spaced wire slots. Position only - no colour,
+        # texture or verdict, so this is safe to send identically to every role.
+        n = len(self.wires)
+        slots = [Slot(idx=i, kind="wire", x=(i + 0.5) / n, y=0.5) for i in range(n)]
+        return Layout(w=n, h=1, slots=slots)
 
     def manual_page(self) -> str:
         head = "".join("<th>%s</th>" % c for c in COLOURS)

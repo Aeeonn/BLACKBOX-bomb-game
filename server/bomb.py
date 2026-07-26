@@ -1,5 +1,6 @@
 
 """Bomb: edge flags, module instances, timer, strikes, role-filtered snapshots."""
+import dataclasses
 import random
 import string
 
@@ -87,6 +88,10 @@ class Bomb:
             "max_strikes": self.max_strikes,
             "flags": flags,
             "modules": [m.views().for_role(role) for m in self.modules],
+            # WORLD: one shared geometry per module, identical for every role.
+            # Kept as its own top-level key (not merged into "modules") so the
+            # role-filtered PERCEPTION view above is untouched by this addition.
+            "layouts": [dataclasses.asdict(m.layout()) for m in self.modules],
         }
 
     def manual_html(self) -> str:
