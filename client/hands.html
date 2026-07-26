@@ -1,0 +1,73 @@
+<!doctype html>
+<meta charset="utf-8"><title>HANDS</title>
+<link rel="stylesheet" href="/common/ui.css">
+<h1>H A N D S</h1><p id="status"></p>
+<div class="flags" id="flags"></div>
+<div class="hud"><div id="time">--:--</div><div class="strikes" id="strikes"></div><div id="phase"></div></div>
+<p style="color:#6b6b6b;font-size:13px">ARROWS move the probe &middot; hold <b>C</b> 1s to cut &middot; hold <b>D</b> 2s to discharge &middot; TAB switches module</p>
+<div class="grid" id="grid"></div>
+<div class="readout" id="readout">probe idle</div>
+<div style="margin-top:12px">
+  <button class="holdbtn" id="cut">HOLD TO CUT<span class="fill"></span></button>
+  <button class="holdbtn" id="dis">HOLD TO DISCHARGE<span class="fill"></span></button>
+</div>
+<div id="log"></div>
+<script type="module">
+import { connect, on, send, logLine, fmtTime, holdButton } from "/common/net.js";
+let mod = 0, cell = 0, state = null;
+
+on("state", m => { state = m.payload; draw(); });
+on("log", m => logLine(m.text));
+on("error", m => logLine("ERROR " + m.text));
+on("probe_result", m => {
+  document.getElementById("readout").textContent =
+    m.data.text ? ("cell " + (m.data.cell + 1) + ": " + m.data.text) : "nothing here";
+});
+
+function probe() { send({ type: "probe", module: mod, cell: cell }); }
+
+function draw() {
+  const s = state; if (!s) return;
+  document.getElementById("time").textContent = fmtTime(s.time_left);
+  document.getElementById("strikes").textContent = "X".repeat(s.strikes);
+  const ph = document.getElementById("phase");
+  ph.textContent = s.phase === "running" ? "" : s.phase.toUpperCase();
+  ph.className = s.phase;
+  document.getElementById("flags").textContent =
+    "casing " + s.flags.casing + " / corner screw " + s.flags.corner_screw + " / " + s.flags.temperature + " to the touch";
+  const v = s.modules[mod] || { count: 0, cut: [] };
+  const g = document.getElementById("grid"); g.innerHTML = "";
+  for (let i = 0; i < v.count; i++) {
+    const d = document.createElement("div");
+    d.className = "cell" + (i === cell ? " sel" : "") + (v.cut[i] ? " cut" : "");
+    d.textContent = "[" + (i + 1) + "]";
+    d.onclick = () => { cell = i; draw(); probe(); };
+    g.appendChild(d);
+  }
+}
+
+addEventListener("keydown", e => {
+  const v = state && state.modules[mod];
+  if (!v) return;
+  if (e.key === "ArrowRight") { cell = Math.min(v.count - 1, cell + 1); draw(); probe(); }
+  if (e.key === "ArrowLeft") { cell = Math.max(0, cell - 1); draw(); probe(); }
+  if (e.key === "Tab") { e.preventDefault(); mod = (mod + 1) % state.modules.length; cell = 0; draw(); probe(); }
+});
+
+const holds = {};
+function keyHold(key, ms, fn) {
+  addEventListener("keydown", e => {
+    if (e.key.toLowerCase() !== key || holds[key]) return;
+    holds[key] = setTimeout(() => { fn(); holds[key] = null; }, ms);
+  });
+  addEventListener("keyup", e => {
+    if (e.key.toLowerCase() === key && holds[key]) { clearTimeout(holds[key]); holds[key] = null; }
+  });
+}
+keyHold("c", 1000, () => send({ type: "act", module: mod, action: { cut: cell } }));
+keyHold("d", 2000, () => send({ type: "act", module: mod, action: { discharge: cell } }));
+holdButton(document.getElementById("cut"), 1000, () => send({ type: "act", module: mod, action: { cut: cell } }));
+holdButton(document.getElementById("dis"), 2000, () => send({ type: "act", module: mod, action: { discharge: cell } }));
+
+connect();
+</script>

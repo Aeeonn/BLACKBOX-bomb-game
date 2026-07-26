@@ -1,0 +1,26 @@
+<!doctype html>
+<meta charset="utf-8"><title>BLACKBOX</title>
+<link rel="stylesheet" href="/common/ui.css">
+<h1>B L A C K B O X</h1>
+<p id="status">lobby</p>
+<button id="make">CREATE ROOM</button>
+<div style="margin-top:16px">
+  <input id="code" placeholder="ROOM" maxlength="4" style="text-transform:uppercase;background:#191919;color:#e8e4d8;border:1px solid #444;padding:10px;width:120px">
+  <button id="go">OPEN LINKS</button>
+</div>
+<div id="links" style="margin-top:20px;line-height:2"></div>
+<script type="module">
+const roles = ["hands", "eyes", "book", "scope", "dispatch"];
+function render(code) {
+  document.getElementById("links").innerHTML =
+    "<b>Room " + code + "</b><br>" +
+    roles.map(r => '<a style="color:#e8e4d8" href="/' + r + '.html?room=' + code + '&role=' + r + '" target="_blank">' + r.toUpperCase() + '</a>').join("<br>") +
+    '<br><a style="color:#e8e4d8" href="/manual/' + code + '" target="_blank">MANUAL (BOOK prints this)</a>';
+}
+document.getElementById("make").onclick = async () => {
+  const j = await (await fetch("/api/room", { method: "POST" })).json();
+  document.getElementById("code").value = j.room;
+  render(j.room);
+};
+document.getElementById("go").onclick = () => render(document.getElementById("code").value.toUpperCase());
+</script>

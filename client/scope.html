@@ -1,0 +1,25 @@
+<!doctype html>
+<meta charset="utf-8"><title>SCOPE</title>
+<link rel="stylesheet" href="/common/ui.css">
+<h1>S C O P E</h1><p id="status"></p>
+<div class="flags" id="flags"></div>
+<div class="hud"><div id="time">--:--</div><div class="strikes" id="strikes"></div></div>
+<p style="color:#6b6b6b;font-size:13px">Internal topology only. No colours, no textures. You are MUTED - draw for BOOK. (Phase 5 replaces this readout with the shared canvas.)</p>
+<pre id="nets" style="font-size:15px"></pre>
+<div id="log"></div>
+<script type="module">
+import { connect, on, logLine, fmtTime } from "/common/net.js";
+on("log", m => logLine(m.text));
+on("state", s => {
+  const p = s.payload;
+  document.getElementById("time").textContent = fmtTime(p.time_left);
+  document.getElementById("strikes").textContent = "X".repeat(p.strikes);
+  document.getElementById("flags").textContent =
+    "board rev " + p.flags.board_rev + " / " + p.flags.jumpers + " jumpers / capacitor " + p.flags.capacitor;
+  document.getElementById("nets").textContent = p.modules.map((m, i) =>
+    "module " + (i + 1) + ": " + m.count + " pads, nets " +
+    (m.nets && m.nets.length ? m.nets.map(n => "(" + (n[0]+1) + "-" + (n[1]+1) + ")").join(" ") : "none")
+  ).join("\n");
+});
+connect();
+</script>

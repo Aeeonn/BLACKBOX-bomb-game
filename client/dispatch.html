@@ -1,0 +1,17 @@
+<!doctype html>
+<meta charset="utf-8"><title>DISPATCH</title>
+<link rel="stylesheet" href="/common/ui.css">
+<h1>D I S P A T C H</h1><p id="status"></p>
+<div class="hud" style="font-size:44px"><div id="time">--:--</div><div class="strikes" id="strikes"></div><div id="phase"></div></div>
+<p style="color:#6b6b6b;font-size:13px">Global layer only. No module contents. Talk to HANDS.</p>
+<div id="log"></div>
+<script type="module">
+import { connect, on, logLine, fmtTime } from "/common/net.js";
+on("log", m => logLine(m.text));
+on("state", s => {
+  document.getElementById("time").textContent = fmtTime(s.payload.time_left);
+  document.getElementById("strikes").textContent = "X".repeat(s.payload.strikes);
+  document.getElementById("phase").textContent = s.payload.phase === "running" ? "" : s.payload.phase.toUpperCase();
+});
+connect();
+</script>
