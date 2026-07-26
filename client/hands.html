@@ -2,6 +2,7 @@
 <meta charset="utf-8"><title>HANDS</title>
 <link rel="stylesheet" href="/common/ui.css">
 <h1>H A N D S</h1><p id="status"></p>
+<div class="stagewrap"><canvas id="stage" width="900" height="320"></canvas></div>
 <div class="flags" id="flags"></div>
 <div class="hud"><div id="time">--:--</div><div class="strikes" id="strikes"></div><div id="phase"></div></div>
 <p style="color:#6b6b6b;font-size:13px">ARROWS move the probe &middot; hold <b>C</b> 1s to cut &middot; hold <b>D</b> 2s to discharge &middot; TAB switches module</p>
@@ -13,12 +14,15 @@
 </div>
 <div id="log"></div>
 <script type="module">
-import { connect, on, send, logLine, fmtTime, holdButton } from "/common/net.js";
+import { connect, on, send, logLine, fmtTime, holdButton, ROLE } from "/common/net.js";
 import { updateOverlay } from "/common/overlay.js";
 import { updateTimerAudio } from "/common/timer-audio.js";
+import { init as initStage, setPresence, setBomb } from "/common/stage.js";
 let mod = 0, cell = 0, state = null;
 
-on("state", m => { state = m.payload; draw(); updateOverlay(state.phase); updateTimerAudio(state.time_left, state.phase); });
+initStage(document.getElementById("stage"), ROLE);
+on("presence", m => setPresence(m.payload));
+on("state", m => { state = m.payload; draw(); updateOverlay(state.phase); updateTimerAudio(state.time_left, state.phase); setBomb(state); });
 on("log", m => logLine(m.text));
 on("error", m => logLine("ERROR " + m.text));
 on("probe_result", m => {

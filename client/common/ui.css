@@ -28,3 +28,6 @@ button:hover { background: #2c2c2c; }
 #overlay.won .overlay-label { color: var(--ok); }
 #overlay.lost .overlay-label { color: var(--hot); }
 #overlay .rearm { font-size: 22px; padding: 16px 40px; }
+.stagewrap { margin: 10px 0 18px; }
+#stage { width: 100%; max-width: 760px; height: auto; aspect-ratio: 900 / 320;
+         background: #111318; border: 1px solid #333; display: block; }

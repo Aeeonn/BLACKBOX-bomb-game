@@ -3,18 +3,22 @@
 <link rel="stylesheet" href="/common/ui.css">
 <div id="flash"></div>
 <h1>E Y E S</h1><p id="status"></p>
+<div class="stagewrap"><canvas id="stage" width="900" height="320"></canvas></div>
 <div class="flags" id="flags"></div>
 <div class="hud"><div id="time">--:--</div><div class="strikes" id="strikes"></div><div id="phase"></div></div>
 <p style="color:#6b6b6b;font-size:13px">TAB switches module. You are DEAFENED in Discord.</p>
 <div class="grid" id="grid"></div>
 <div id="log"></div>
 <script type="module">
-import { connect, on, logLine, fmtTime } from "/common/net.js";
+import { connect, on, logLine, fmtTime, ROLE } from "/common/net.js";
 import { updateOverlay } from "/common/overlay.js";
+import { init as initStage, setPresence, setBomb } from "/common/stage.js";
 let mod = 0, state = null;
 const SWATCH = { red:"#b33", blue:"#36c", yellow:"#dc3", white:"#eee", black:"#000", green:"#3a3" };
 
-on("state", m => { state = m.payload; draw(); updateOverlay(state.phase); });
+initStage(document.getElementById("stage"), ROLE);
+on("presence", m => setPresence(m.payload));
+on("state", m => { state = m.payload; draw(); updateOverlay(state.phase); setBomb(state); });
 on("log", m => logLine(m.text));
 on("flash", m => {
   const f = document.getElementById("flash");
