@@ -41,16 +41,25 @@ def test_rearm_replaces_the_bomb_object_not_just_its_state():
 
 
 def test_rearm_reseeds_widely_and_changes_the_rule_table():
+    # Room.start() has no pool passthrough (only Bomb() does directly, and
+    # this test is specifically about Room's own REARM behaviour, not about
+    # forcing module selection) - now that the registry holds M1/M2/M3, a
+    # given round may draw any of them, so this only compares BraidHue's
+    # .table across whichever rounds happen to draw m01, skipping the rest.
+    # 50 iterations across 3 registered module ids still yields plenty of
+    # m01 samples to compare.
     room = Room("BBBB")
     seeds, tables = set(), set()
     for _ in range(50):
         asyncio.run(room.start(modules=1))
         seeds.add(room.bomb.seed)
-        tables.add(json.dumps(room.bomb.modules[0].table, sort_keys=True))
+        m = room.bomb.modules[0]
+        if m.id == "m01":
+            tables.add(json.dumps(m.table, sort_keys=True))
         room.bomb.phase = "won"
 
     assert len(seeds) > 45, "seed range looks too small - collisions too frequent"
-    assert len(tables) > 1, "consecutive rounds produced the same M1 rule table"
+    assert len(tables) > 1, "consecutive m01 rounds produced the same rule table"
 
 
 def test_start_is_a_no_op_while_a_round_is_running():
