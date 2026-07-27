@@ -113,6 +113,9 @@ const ACTIONS = {
   manifest: [
     { key: "p", action: "press", chargeKind: "cut", label: "HOLD TO STAMP", ms: HOLD_MS.cut },
   ],
+  static: [
+    { key: "p", action: "press", chargeKind: "cut", label: "HOLD TO PRESS", ms: HOLD_MS.cut },
+  ],
 };
 
 function currentKind() {
@@ -131,12 +134,13 @@ function draw() {
     "casing " + s.flags.casing + " / corner screw " + s.flags.corner_screw + " / " + s.flags.temperature + " to the touch";
   const v = s.modules[mod] || { count: 0, cut: [], resolved: [] };
   const layout = (s.layouts && s.layouts[mod]) || { slots: [] };
-  // "cut" (wires), "resolved" (ledger) and "pressed" (manifest) all mean the
-  // same thing here: this cell can no longer be acted on. Whichever array
-  // the current module's kind actually sends is the one we read. Gauge has
-  // none of these - its one slot is never "done", just turned and re-locked.
+  // "cut" (wires), "resolved" (ledger) and "pressed" (manifest/static) all
+  // mean the same thing here: this cell can no longer be acted on. Whichever
+  // array the current module's kind actually sends is the one we read.
+  // Gauge has none of these - its one slot is never "done", just turned and
+  // re-locked.
   const done = v.kind === "ledger" ? (v.resolved || [])
-    : v.kind === "manifest" ? (v.pressed || [])
+    : (v.kind === "manifest" || v.kind === "static") ? (v.pressed || [])
     : (v.cut || []);
   renderBombFace(document.getElementById("grid"), layout, (el, slot, i) => {
     el.className = "slot" + (i === cell ? " sel" : "") + (done[i] ? " cut" : "");

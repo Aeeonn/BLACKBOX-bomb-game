@@ -29,7 +29,8 @@ document.getElementById("helpToggle").onclick = () => {
   panel.hidden = !panel.hidden;
 };
 let mod = 0, state = null, presence = null;
-const SWATCH = { red:"#b33", blue:"#36c", yellow:"#dc3", white:"#eee", black:"#000", green:"#3a3" };
+const SWATCH = { red:"#b33", blue:"#36c", yellow:"#dc3", white:"#eee", black:"#000", green:"#3a3",
+                 amber:"#c80", teal:"#288" };
 
 on("lobby", m => renderRoster(document.getElementById("roster"), m.roster));
 let isReady = false;
@@ -123,6 +124,15 @@ function draw() {
       el.className = "slot" + (t.pressed ? " cut" : "") + (isProbed ? " probed" : "") + (isCharging ? " charging" : "");
       el.style.borderColor = "#333";
       el.innerHTML = "<div>[" + (i + 1) + "]<br><b style=\"font-size:22px\">" + (t.letter || "") + "</b></div>";
+    } else if (v.kind === "static") {
+      // M5: EYES only ever sees the tile's colour, never HANDS' felt
+      // buzz/quiet state or the buzzing tally it adds up to - EYES has no
+      // way to know which colour is currently correct without hearing that
+      // tally from HANDS and the rule from BOOK.
+      const t = (v.tiles && v.tiles[i]) || {};
+      el.className = "slot" + (t.pressed ? " cut" : "") + (isProbed ? " probed" : "") + (isCharging ? " charging" : "");
+      el.style.borderColor = SWATCH[t.colour] || "#333";
+      el.innerHTML = "<div>[" + (i + 1) + "]<br>" + (t.colour || "") + "</div>";
     } else {
       const w = v.wires[i] || {};
       el.className = "slot" + (w.cut ? " cut" : "") + (isProbed ? " probed" : "") + (isCharging ? " charging" : "");
