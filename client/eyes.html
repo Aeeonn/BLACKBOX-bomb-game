@@ -4,6 +4,8 @@
 <div id="flash"></div>
 <h1>D E A F</h1><p id="status"></p>
 <p class="comms-card" id="comms"></p>
+<button class="help-toggle" id="helpToggle">? How do I play this role</button>
+<div class="help-panel" id="helpPanel" hidden></div>
 <div class="roster" id="roster"></div>
 <button class="readybtn" id="ready">I'M READY</button>
 <div class="stagewrap"><canvas id="stage" width="900" height="320"></canvas></div>
@@ -16,10 +18,16 @@
 <script type="module">
 import { connect, on, send, logLine, fmtTime, ROLE } from "/common/net.js";
 import { updateOverlay } from "/common/overlay.js";
+import { updateFeedback } from "/common/feedback.js";
 import { init as initStage, setPresence, setBomb, findPlayer } from "/common/stage.js";
 import { renderBombFace, paintCharge } from "/common/bombface.js";
-import { COMMS, renderRoster, pauseText, DISPLAY_NAME } from "/common/roster.js";
+import { COMMS, HELP, renderRoster, pauseText, DISPLAY_NAME } from "/common/roster.js";
 document.getElementById("comms").textContent = COMMS[ROLE];
+document.getElementById("helpPanel").textContent = HELP[ROLE];
+document.getElementById("helpToggle").onclick = () => {
+  const panel = document.getElementById("helpPanel");
+  panel.hidden = !panel.hidden;
+};
 let mod = 0, state = null, presence = null;
 const SWATCH = { red:"#b33", blue:"#36c", yellow:"#dc3", white:"#eee", black:"#000", green:"#3a3" };
 
@@ -35,7 +43,17 @@ readyBtn.onclick = () => {
 
 initStage(document.getElementById("stage"), ROLE, send);
 on("presence", m => { presence = m.payload; setPresence(m.payload); draw(); });
-on("state", m => { state = m.payload; draw(); updateOverlay(state.phase); setBomb(state); });
+on("state", m => {
+  state = m.payload;
+  draw();
+  updateOverlay(state.phase, undefined, state.paused, pauseText(presence));
+  // updateFeedback's audio half is a no-op for DEAF (see feedback.js's own
+  // ALLOWED gate, same hands/book-only rule as the timer tick) - the flash
+  // half is NOT gated, since strikes/solved-count are already broadcast to
+  // every role and a visual cue reacting to them leaks nothing new.
+  updateFeedback(state.strikes, state.modules.filter(mv => mv.solved).length, state.phase);
+  setBomb(state);
+});
 on("log", m => logLine(m.text));
 on("flash", m => {
   const f = document.getElementById("flash");
@@ -89,6 +107,22 @@ function draw() {
       el.className = "slot" + (glowing ? " glowing" : "") + (isProbed ? " probed" : "") + (isCharging ? " charging" : "");
       el.style.borderColor = glowing ? "#c8402f" : "#333";
       el.innerHTML = "<div>[" + (i + 1) + "]" + (glowing ? "<br><small>GLOWING</small>" : "") + "</div>";
+    } else if (v.kind === "gauge") {
+      // T16: one slot only (the dial itself) - shows the needle's current
+      // 1-12 number. EYES never sees the target zone, only where the
+      // needle currently sits; the zone lives solely in MUTE's manual.
+      el.className = "slot" + (isProbed ? " probed" : "") + (isCharging ? " charging" : "");
+      el.style.borderColor = "#333";
+      el.innerHTML = "<div>Needle at<br><b style=\"font-size:28px\">" + (v.position + 1) +
+        "</b><br><small>of " + v.count + "</small></div>";
+    } else if (v.kind === "manifest") {
+      // M4: EYES only ever sees the printed letter, never HANDS' felt
+      // symbol or the step it maps to - same "one axis each" split as
+      // ledger's number, just a letter instead.
+      const t = (v.stamps && v.stamps[i]) || {};
+      el.className = "slot" + (t.pressed ? " cut" : "") + (isProbed ? " probed" : "") + (isCharging ? " charging" : "");
+      el.style.borderColor = "#333";
+      el.innerHTML = "<div>[" + (i + 1) + "]<br><b style=\"font-size:22px\">" + (t.letter || "") + "</b></div>";
     } else {
       const w = v.wires[i] || {};
       el.className = "slot" + (w.cut ? " cut" : "") + (isProbed ? " probed" : "") + (isCharging ? " charging" : "");

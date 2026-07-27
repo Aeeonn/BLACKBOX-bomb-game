@@ -3,6 +3,8 @@
 <link rel="stylesheet" href="/common/ui.css">
 <h1>B L I N D</h1><p id="status"></p>
 <p class="comms-card" id="comms"></p>
+<button class="help-toggle" id="helpToggle">? How do I play this role</button>
+<div class="help-panel" id="helpPanel" hidden></div>
 <div class="roster" id="roster"></div>
 <button class="readybtn" id="ready">I'M READY</button>
 <div class="stagewrap"><canvas id="stage" width="900" height="320"></canvas></div>
@@ -17,10 +19,16 @@
 import { connect, on, send, logLine, fmtTime, holdButton, ROLE } from "/common/net.js";
 import { updateOverlay } from "/common/overlay.js";
 import { updateTimerAudio } from "/common/timer-audio.js";
+import { updateFeedback } from "/common/feedback.js";
 import { init as initStage, setPresence, setBomb } from "/common/stage.js";
 import { renderBombFace } from "/common/bombface.js";
-import { COMMS, renderRoster, pauseText } from "/common/roster.js";
+import { COMMS, HELP, renderRoster, pauseText } from "/common/roster.js";
 document.getElementById("comms").textContent = COMMS[ROLE];
+document.getElementById("helpPanel").textContent = HELP[ROLE];
+document.getElementById("helpToggle").onclick = () => {
+  const panel = document.getElementById("helpPanel");
+  panel.hidden = !panel.hidden;
+};
 let mod = 0, cell = 0, state = null, presence = null;
 
 on("lobby", m => renderRoster(document.getElementById("roster"), m.roster));
@@ -35,12 +43,26 @@ readyBtn.onclick = () => {
 
 initStage(document.getElementById("stage"), ROLE, send);
 on("presence", m => { presence = m.payload; setPresence(m.payload); });
-on("state", m => { state = m.payload; draw(); updateOverlay(state.phase); updateTimerAudio(state.time_left, state.phase); setBomb(state); });
+on("state", m => {
+  state = m.payload;
+  draw();
+  updateOverlay(state.phase, undefined, state.paused, pauseText(presence));
+  updateTimerAudio(state.time_left, state.phase);
+  updateFeedback(state.strikes, state.modules.filter(mv => mv.solved).length, state.phase);
+  setBomb(state);
+});
 on("log", m => logLine(m.text));
 on("error", m => logLine("ERROR " + m.text));
 on("probe_result", m => {
-  document.getElementById("readout").textContent =
-    m.data.text ? ("cell " + (m.data.cell + 1) + ": " + m.data.text) : "nothing here";
+  // T16: Gauge only ever has one "cell" (the knob itself), so "cell 1:
+  // click" would read oddly - a plain "the knob: click" phrasing fits how
+  // a real player would describe turning a single dial.
+  const readout = document.getElementById("readout");
+  if (currentKind() === "gauge") {
+    readout.textContent = m.data.text ? ("the knob: " + m.data.text) : "nothing here";
+  } else {
+    readout.textContent = m.data.text ? ("cell " + (m.data.cell + 1) + ": " + m.data.text) : "nothing here";
+  }
 });
 
 function probe() { send({ type: "probe", module: mod, cell: cell }); }
@@ -63,17 +85,33 @@ function probe() { send({ type: "probe", module: mod, cell: cell }); }
 // ring's internal "kind" label says "cut" even when you're really pressing,
 // skipping, or purging. Nothing ever displays that label as text, only its
 // timing, so this is invisible in play.
+//
+// Polish pass: these durations MUST match server/stage.py's
+// HOLD_DURATIONS_S - that's the ring's true authoritative timing, this copy
+// only decides when THIS client actually fires the real action message.
+// Defining them once here (instead of five separate inline "ms: 1000"
+// literals scattered through ACTIONS below) means there is now exactly one
+// client-side place to update if either duration ever changes, matching
+// there being exactly one server-side place.
+const HOLD_MS = { cut: 1000, discharge: 2000 };
+
 const ACTIONS = {
   wires: [
-    { key: "c", action: "cut", chargeKind: "cut", label: "HOLD TO CUT", ms: 1000 },
-    { key: "d", action: "discharge", chargeKind: "discharge", label: "HOLD TO DISCHARGE", ms: 2000 },
+    { key: "c", action: "cut", chargeKind: "cut", label: "HOLD TO CUT", ms: HOLD_MS.cut },
+    { key: "d", action: "discharge", chargeKind: "discharge", label: "HOLD TO DISCHARGE", ms: HOLD_MS.discharge },
   ],
   ledger: [
-    { key: "p", action: "press", chargeKind: "cut", label: "HOLD TO PRESS", ms: 1000 },
-    { key: "k", action: "skip", chargeKind: "cut", label: "HOLD TO SKIP", ms: 1000 },
+    { key: "p", action: "press", chargeKind: "cut", label: "HOLD TO PRESS", ms: HOLD_MS.cut },
+    { key: "k", action: "skip", chargeKind: "cut", label: "HOLD TO SKIP", ms: HOLD_MS.cut },
   ],
   vent: [
-    { key: "v", action: "purge", chargeKind: "cut", label: "HOLD TO PURGE", ms: 1000 },
+    { key: "v", action: "purge", chargeKind: "cut", label: "HOLD TO PURGE", ms: HOLD_MS.cut },
+  ],
+  gauge: [
+    { key: "l", action: "lock", chargeKind: "cut", label: "HOLD TO LOCK IN", ms: HOLD_MS.cut },
+  ],
+  manifest: [
+    { key: "p", action: "press", chargeKind: "cut", label: "HOLD TO STAMP", ms: HOLD_MS.cut },
   ],
 };
 
@@ -93,21 +131,35 @@ function draw() {
     "casing " + s.flags.casing + " / corner screw " + s.flags.corner_screw + " / " + s.flags.temperature + " to the touch";
   const v = s.modules[mod] || { count: 0, cut: [], resolved: [] };
   const layout = (s.layouts && s.layouts[mod]) || { slots: [] };
-  // "cut" (wires) and "resolved" (ledger) both mean the same thing here:
-  // this cell can no longer be acted on. Whichever array the current
-  // module's kind actually sends is the one we read.
-  const done = v.kind === "ledger" ? (v.resolved || []) : (v.cut || []);
+  // "cut" (wires), "resolved" (ledger) and "pressed" (manifest) all mean the
+  // same thing here: this cell can no longer be acted on. Whichever array
+  // the current module's kind actually sends is the one we read. Gauge has
+  // none of these - its one slot is never "done", just turned and re-locked.
+  const done = v.kind === "ledger" ? (v.resolved || [])
+    : v.kind === "manifest" ? (v.pressed || [])
+    : (v.cut || []);
   renderBombFace(document.getElementById("grid"), layout, (el, slot, i) => {
     el.className = "slot" + (i === cell ? " sel" : "") + (done[i] ? " cut" : "");
-    el.textContent = "[" + (i + 1) + "]";
+    el.textContent = v.kind === "gauge" ? "KNOB" : ("[" + (i + 1) + "]");
     el.onclick = () => { cell = i; draw(); probe(); };
   });
   ensureActionButtons(currentKind());
 }
 
+// T16: Gauge is the first module where turning is a real state-changing
+// server action (not just moving a local UI cursor between cells like
+// every other module's arrows do) - ArrowLeft/Right send an "act" message
+// with {turn: "ccw"/"cw"} and re-probe the single knob for fresh tactile
+// feedback, rather than changing `cell` (which stays 0 the whole round).
 addEventListener("keydown", e => {
   const v = state && state.modules[mod];
   if (!v) return;
+  if (currentKind() === "gauge") {
+    if (e.key === "ArrowRight") { send({ type: "act", module: mod, action: { turn: "cw" } }); probe(); }
+    if (e.key === "ArrowLeft") { send({ type: "act", module: mod, action: { turn: "ccw" } }); probe(); }
+    if (e.key === "Tab") { e.preventDefault(); mod = (mod + 1) % state.modules.length; cell = 0; draw(); probe(); }
+    return;
+  }
   if (e.key === "ArrowRight") { cell = Math.min(v.count - 1, cell + 1); draw(); probe(); }
   if (e.key === "ArrowLeft") { cell = Math.max(0, cell - 1); draw(); probe(); }
   if (e.key === "Tab") { e.preventDefault(); mod = (mod + 1) % state.modules.length; cell = 0; draw(); probe(); }
