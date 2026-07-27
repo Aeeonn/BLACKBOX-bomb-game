@@ -132,7 +132,8 @@ class Room:
             await self.send(role, {"type": "log", "text": text})
 
     async def start(self, seed=None, modules: int = 2, seconds: float = 300.0,
-                     probe_echo: bool = True, precise_pointing: bool = False) -> None:
+                     probe_echo: bool = True, precise_pointing: bool = False,
+                     mirror: bool = False) -> None:
         # Refuse to clobber a bomb that's still running - REARM (or a stray
         # extra ARM click) may only replace a bomb that hasn't been created
         # yet or has already ended in "won"/"lost".
@@ -140,8 +141,12 @@ class Room:
             return
         self.bomb = Bomb(seed if seed is not None else random.randrange(2 ** 31),
                          module_count=modules, seconds=seconds,
-                         roles=set(self.sockets.keys()))
-        self.stage.probe_echo = probe_echo
+                         roles=set(self.sockets.keys()), mirror=mirror)
+        # T18: Mirror forces probe_echo off, overriding even an explicit
+        # request - watching HANDS' probe-echo ring at its shared-layout
+        # position while EYES describes a different position entirely would
+        # reveal the flip instantly (see AGENTS.md T18).
+        self.stage.probe_echo = False if mirror else probe_echo
         self.stage.precise_pointing = precise_pointing
         # A stale probe/charge/pointer from the previous round could
         # momentarily point at a slot that doesn't exist in the new bomb's
@@ -186,7 +191,8 @@ class Room:
                              modules=int(msg.get("modules", 2)),
                              seconds=float(msg.get("seconds", 300)),
                              probe_echo=bool(msg.get("probe_echo", True)),
-                             precise_pointing=bool(msg.get("precise_pointing", False)))
+                             precise_pointing=bool(msg.get("precise_pointing", False)),
+                             mirror=bool(msg.get("mirror", False)))
 
         elif kind == "act" and self.bomb is not None:
             idx = int(msg.get("module", 0))

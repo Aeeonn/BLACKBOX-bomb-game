@@ -1,10 +1,44 @@
-body { font-family: Georgia, serif; background: #fdfaf2; color: #1a1a1a; max-width: 760px; margin: 0 auto; padding: 30px; }
-h1 { letter-spacing: 4px; border-bottom: 3px double #1a1a1a; }
+body { font-family: Georgia, serif; background: #fdfaf2; color: #1a1a1a; max-width: 760px; margin: 0 auto; padding: 30px 30px 60px; }
+h1 { letter-spacing: 4px; border-bottom: 3px double #1a1a1a; break-after: avoid; page-break-after: avoid; }
 .seed { color: #777; font-style: italic; }
-.module { page-break-inside: avoid; border: 2px solid #1a1a1a; padding: 16px; margin: 22px 0; }
-table.rules { border-collapse: collapse; width: 100%; margin: 12px 0; }
+p, li { orphans: 3; widows: 3; }
+/* T17: one module per printed page. Each module is wrapped server-side
+   (Bomb.manual_html()) in a numbered .modpage div - the label is real,
+   always-correct content-based numbering ("Module 2 of 3"), since browsers'
+   print engines don't reliably expose true physical page numbers via CSS
+   alone. The first module continues right after the title page instead of
+   forcing a blank leading page. */
+.modpage { break-before: page; page-break-before: always; }
+.modpage:first-of-type { break-before: auto; page-break-before: auto; }
+.modpage-label { font-size: 11px; color: #888; text-transform: uppercase; letter-spacing: 2px; margin-bottom: 6px; }
+.module { page-break-inside: avoid; break-inside: avoid; border: 2px solid #1a1a1a; padding: 16px; margin: 22px 0; }
+table.rules { border-collapse: collapse; width: 100%; margin: 12px 0; break-inside: avoid; }
 table.rules th, table.rules td { border: 1px solid #1a1a1a; padding: 6px 8px; text-align: center; font-size: 13px; }
 .v-cut { background: #e9e9e9; font-weight: bold; }
 .v-last { background: #cfcfcf; font-weight: bold; }
 .notes { font-size: 14px; }
-@media print { body { background: #fff; } .module { break-inside: avoid; } }
+/* T18: the mirror-modifier warning - a real footnote, styled to stand out
+   since it's the ONLY place this modifier is ever disclosed to players. */
+.mirror-note { border: 2px dashed #1a1a1a; padding: 10px 14px; margin-top: 26px; font-size: 13px; }
+/* T17: a real A4 page size/margin for anyone printing this. Best-effort
+   native page-number counter for the print engines that do support CSS
+   Paged Media margin boxes (mainstream browsers mostly don't, which is
+   exactly why the .modpage-label above exists as the reliable fallback) -
+   harmless no-op where unsupported. */
+@page {
+  size: A4;
+  margin: 18mm 16mm;
+  @bottom-right { content: counter(page) " / " counter(pages); font-size: 10px; color: #888; }
+}
+/* T17: seed/room code repeated in a real footer on every printed page.
+   position:fixed elements repeat on each page in print output in every
+   major browser - the standard trick for a running print footer without a
+   build step or JS. */
+.print-footer { display: none; }
+@media print {
+  body { background: #fff; padding-bottom: 40px; }
+  .module { break-inside: avoid; }
+  .print-footer { display: block; position: fixed; bottom: 0; left: 0; right: 0;
+                  text-align: center; font-size: 10px; color: #777;
+                  border-top: 1px solid #ccc; padding-top: 4px; }
+}

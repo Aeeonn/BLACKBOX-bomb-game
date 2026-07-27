@@ -43,7 +43,9 @@ async def manual(code: str):
     return HTMLResponse(
         "<!doctype html><meta charset='utf-8'><title>Manual %s</title><style>%s</style>"
         "<h1>Defusal Manual</h1><p class='seed'>Room %s / seed %d</p>%s"
-        % (code.upper(), css, code.upper(), room.bomb.seed, room.bomb.manual_html()))
+        "<div class='print-footer'>Room %s &middot; Seed %d</div>"
+        % (code.upper(), css, code.upper(), room.bomb.seed, room.bomb.manual_html(),
+           code.upper(), room.bomb.seed))
 
 
 @app.websocket("/ws")
