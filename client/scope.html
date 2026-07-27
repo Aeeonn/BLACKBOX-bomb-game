@@ -35,9 +35,9 @@ initStage(document.getElementById("stage"), ROLE, send);
 on("presence", m => { presence = m.payload; setPresence(m.payload); if (lastPayload) drawScopeShells(lastPayload); });
 on("log", m => logLine(m.text));
 
-// SCOPE's shell: slot indices only, same as BOOK - SCOPE's own views() has no
+// SCOPE's shell: slot indices only, same as MUTE - SCOPE's own views() has no
 // per-slot colour or texture either, only the netlist already shown below.
-// T12: also highlights whichever module BOOK is currently pointing at -
+// T12: also highlights whichever module MUTE is currently pointing at -
 // read-only here, SCOPE never sends its own point messages.
 function drawScopeShells(payload) {
   const layouts = payload.layouts || [];
@@ -45,10 +45,10 @@ function drawScopeShells(payload) {
   while (container.children.length > layouts.length) {
     container.removeChild(container.lastChild);
   }
-  const hp = findPlayer(presence, "hands");
+  const hp = findPlayer(presence, "blind");
   const probe = hp && hp.probe;
   const charge = hp && hp.charge;
-  const bp = findPlayer(presence, "book");
+  const bp = findPlayer(presence, "mute");
   const pointedModule = bp && bp.pointer ? bp.pointer.module : null;
   layouts.forEach((layout, i) => {
     let box = container.children[i];

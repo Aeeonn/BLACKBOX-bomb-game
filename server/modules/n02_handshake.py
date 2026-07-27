@@ -6,17 +6,17 @@ The second needy module (see N1's docstring for what "needy" means: it never
 "always act correctly when it goes off." This module's rule is the opposite
 kind of hard: most rounds, the correct move is to do NOTHING at all.
 
-A sync port opens a brief window periodically. EYES sees the window live (a
-light) and already knows their own sticker brand. HANDS does NOT see the
+A sync port opens a brief window periodically. DEAF sees the window live (a
+light) and already knows their own sticker brand. BLIND does NOT see the
 window in their broadcast view at all - only by actively probing the port
 ("syncing" vs "idle"), the same redundant-channel discipline N1 uses for its
-glowing vent. BOOK's manual holds the rule: if the sticker reads KOWALSKI,
-HANDS must confirm every single sync; otherwise HANDS must NOT confirm and
+glowing vent. MUTE's manual holds the rule: if the sticker reads KOWALSKI,
+BLIND must confirm every single sync; otherwise BLIND must NOT confirm and
 should let it pass on its own.
 
-Three-key rule: satisfied. HANDS alone can feel whether a window is open but
-has no idea whether to confirm it; EYES alone sees the window and their own
-sticker but cannot act and does not know the rule; BOOK alone knows the rule
+Three-key rule: satisfied. BLIND alone can feel whether a window is open but
+has no idea whether to confirm it; DEAF alone sees the window and their own
+sticker but cannot act and does not know the rule; MUTE alone knows the rule
 but not the sticker value or when any window is open.
 """
 import html
@@ -40,7 +40,7 @@ class Handshake(Module):
         # generate()'s one shared-rng call is spent elsewhere.
         self._rng = random.Random(rng.randrange(2 ** 31))
 
-        # Reuses the existing EYES "sticker" flag (unused until now) - EYES
+        # Reuses the existing DEAF "sticker" flag (unused until now) - DEAF
         # already sees their own sticker brand, so the rule is checkable
         # with no new flag or broadcast field.
         self.should_confirm = flags.get("sticker") == "KOWALSKI"
@@ -73,7 +73,7 @@ class Handshake(Module):
         return Result.NOTHING
 
     def act(self, role: str, action: dict) -> Result:
-        if role != "hands" or "confirm" not in action or not self.window_open:
+        if role != "blind" or "confirm" not in action or not self.window_open:
             return Result.NOTHING
         self.confirmed_this_window = True
         # Closes the window immediately either way - once the call is made,
@@ -85,15 +85,15 @@ class Handshake(Module):
         return Result.STRIKE  # confirmed on a window that should've been left alone
 
     def inspect(self, role: str, query: dict) -> dict:
-        if role != "hands" or "cell" not in query or int(query["cell"]) != 0:
+        if role != "blind" or "cell" not in query or int(query["cell"]) != 0:
             return {}
         return {"cell": 0, "text": "syncing" if self.window_open else "idle"}
 
     def views(self) -> Views:
         return Views(
-            hands={"kind": "handshake", "solved": self.solved},
-            eyes={"kind": "handshake", "open": self.window_open, "solved": self.solved},
-            book={"kind": "manual", "module": self.name, "solved": self.solved},
+            blind={"kind": "handshake", "solved": self.solved},
+            deaf={"kind": "handshake", "open": self.window_open, "solved": self.solved},
+            mute={"kind": "manual", "module": self.name, "solved": self.solved},
             scope={"kind": "netlist", "count": 1, "nets": [], "solved": self.solved},
         )
 
@@ -103,10 +103,10 @@ class Handshake(Module):
     def manual_page(self) -> str:
         notes = [
             "This module never finishes - it must be tended for the whole round.",
-            "HANDS can feel whether the sync port is currently syncing by probing it, at any time.",
-            "EYES calls out the sticker brand shown on their own display.",
-            "If the sticker reads <b>KOWALSKI</b>, HANDS must confirm every single time the "
-            "port syncs. If it reads anything else, HANDS must NOT confirm - let every sync "
+            "BLIND can feel whether the sync port is currently syncing by probing it, at any time.",
+            "DEAF calls out the sticker brand shown on their own display.",
+            "If the sticker reads <b>KOWALSKI</b>, BLIND must confirm every single time the "
+            "port syncs. If it reads anything else, BLIND must NOT confirm - let every sync "
             "pass on its own instead.",
             "Confirming when you shouldn't, or missing a required confirm before a sync ends, "
             "is a strike.",

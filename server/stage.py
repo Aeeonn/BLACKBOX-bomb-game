@@ -9,7 +9,7 @@ rendering evolves later.
 import time
 from dataclasses import dataclass
 
-ROLES = ("hands", "eyes", "book", "scope", "dispatch")
+ROLES = ("blind", "deaf", "mute", "scope", "dispatch")
 GESTURE_TTL = 1.2   # seconds a gesture stays visible before clearing itself
 MOVING_TTL = 0.5    # seconds after a pose update before "moving" clears
 
@@ -17,7 +17,7 @@ MOVING_TTL = 0.5    # seconds after a pose update before "moving" clears
 # "1s hold (2s discharge)"). The server owns these so the ring's fill rate is
 # identical for every viewer regardless of the charging client's own frame
 # timing or network latency, and so a client can't lie about how fast it
-# should fill. hands.html's own local action-firing timers use the same
+# should fill. blind.html's own local action-firing timers use the same
 # values for a different purpose (deciding when to actually send the `act`
 # message) - see the comment there if either number ever changes.
 HOLD_DURATIONS_S = {"cut": 1.0, "discharge": 2.0}
@@ -58,13 +58,13 @@ class Stage:
         # so every role's avatar always renders (greyed) even before anyone
         # has ever taken that seat. See AGENTS.md hard rule 4.
         self.avatars: dict[str, Avatar] = {role: Avatar(role) for role in ROLES}
-        # Match flag, default on (see AGENTS.md T9/T18). Gates whether HANDS'
+        # Match flag, default on (see AGENTS.md T9/T18). Gates whether BLIND's
         # probed cell is echoed to anyone at all. T18 (Mirror) will turn this
         # off, because watching the echoed hand would give the flip away
         # instantly.
         self.probe_echo: bool = True
-        # Match flag, default off (see AGENTS.md T12). BOOK's pointer resolves
-        # to a module by default; cell-level pointing would let BOOK issue
+        # Match flag, default off (see AGENTS.md T12). MUTE's pointer resolves
+        # to a module by default; cell-level pointing would let MUTE issue
         # complete instructions without the voice relay, so it stays off
         # until the humans explicitly ask for it.
         self.precise_pointing: bool = False
@@ -100,9 +100,9 @@ class Stage:
         a.gesture_at = time.monotonic()
 
     def apply_point(self, role: str, target: dict | None) -> None:
-        # HANDS cannot point - HANDS is the only pair of hands that can act,
-        # and giving HANDS a pointer too would let it skip the voice relay.
-        if role == "hands":
+        # BLIND cannot point - BLIND is the only one who can act on the bomb,
+        # and giving BLIND a pointer too would let it skip the voice relay.
+        if role == "blind":
             return
         a = self.avatars.get(role)
         if a is None:
@@ -121,13 +121,13 @@ class Stage:
             a.pointer = {"module": module}
 
     def apply_probe(self, role: str, module: int, cell: int) -> None:
-        """Record where HANDS' hand currently is on the bomb - module+cell
+        """Record where BLIND's hand currently is on the bomb - module+cell
         indices ONLY. The descriptor text never reaches this class at all
         (callers must pass the raw incoming message args, never the result of
         Bomb.inspect()), which is what makes it safe for presence() to
         broadcast this to every role. See AGENTS.md T9.
         """
-        if role != "hands":
+        if role != "blind":
             return
         a = self.avatars.get(role)
         if a is None:
@@ -135,7 +135,7 @@ class Stage:
         a.probe = {"module": module, "cell": cell}
 
     def start_charge(self, role: str, kind: str, module: int, cell: int) -> None:
-        """HANDS begins holding to cut/discharge. Only module+cell indices and
+        """BLIND begins holding to cut/discharge. Only module+cell indices and
         a start timestamp are stored - presence() computes the live fill
         fraction from the server's own clock every tick (same self-correcting
         pattern as Avatar.moving), so the ring can never end up stuck at the
@@ -143,7 +143,7 @@ class Stage:
         or delayed, and a client can't lie about how fast it fills. See
         AGENTS.md hard rule 12 and T10.
         """
-        if role != "hands" or kind not in HOLD_DURATIONS_S:
+        if role != "blind" or kind not in HOLD_DURATIONS_S:
             return
         a = self.avatars.get(role)
         if a is None:
@@ -166,12 +166,12 @@ class Stage:
 
     def presence(self, role: str) -> dict:
         """Per-role filtered presence payload. See AGENTS.md's presence filter
-        matrix: HANDS never receives yaw/pitch/gaze/gesture/pointer keys for
+        matrix: BLIND never receives yaw/pitch/gaze/gesture/pointer keys for
         OTHER players - those keys are omitted entirely, not just nulled out.
         A player always receives their own fields at full detail, regardless
-        of which role they are. HANDS' probe cell (module+cell indices, never
-        the descriptor text) is the one exception to the "hidden from HANDS'
-        view of others" rule: it is visible to every role, including HANDS'
+        of which role they are. BLIND's probe cell (module+cell indices, never
+        the descriptor text) is the one exception to the "hidden from BLIND's
+        view of others" rule: it is visible to every role, including BLIND's
         own entry, per the matrix - gated only by probe_echo. The commit-charge
         ring is visible to every role unconditionally (no flag): hard rule 12
         says it must never be optimised away or made local-only.
@@ -179,15 +179,15 @@ class Stage:
         players = []
         for other_role, a in self.avatars.items():
             entry = {"role": other_role, "connected": a.connected, "moving": a.moving}
-            if other_role == role or role != "hands":
+            if other_role == role or role != "blind":
                 entry["yaw"] = a.yaw
                 entry["pitch"] = a.pitch
                 entry["gaze"] = a.gaze
                 entry["gesture"] = a.live_gesture()
                 entry["pointer"] = a.pointer
-            if other_role == "hands" and self.probe_echo:
+            if other_role == "blind" and self.probe_echo:
                 entry["probe"] = a.probe
-            if other_role == "hands":
+            if other_role == "blind":
                 entry["charge"] = self._charge_view(a)
             players.append(entry)
         return {"players": players}

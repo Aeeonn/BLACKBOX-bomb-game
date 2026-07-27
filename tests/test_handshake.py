@@ -15,46 +15,46 @@ from server.modules.n02_handshake import WINDOW_S, Handshake
 POOL = ["n02"]
 
 
-def test_hands_view_never_carries_window_or_rule_data():
+def test_blind_view_never_carries_window_or_rule_data():
     for seed in range(100):
         m = Handshake()
         m.generate(random.Random(seed), {})
-        hv = m.views().hands
+        hv = m.views().blind
         assert set(hv.keys()) == {"kind", "solved"}, \
-            "seed %d: hands view has an unexpected key %r" % (seed, hv.keys())
+            "seed %d: blind view has an unexpected key %r" % (seed, hv.keys())
 
 
-def test_eyes_view_has_the_window_but_never_the_rule():
+def test_deaf_view_has_the_window_but_never_the_rule():
     for seed in range(100):
         m = Handshake()
         m.generate(random.Random(seed), {})
-        ev = m.views().eyes
+        ev = m.views().deaf
         assert set(ev.keys()) == {"kind", "open", "solved"}
 
 
-def test_book_gets_no_window_or_sticker_state():
+def test_mute_gets_no_window_or_sticker_state():
     for seed in range(100):
         m = Handshake()
         m.generate(random.Random(seed), {})
-        bv = m.views().book
+        bv = m.views().mute
         assert set(bv.keys()) <= {"kind", "module", "solved"}
 
 
-def test_only_hands_can_probe_handshake():
+def test_only_blind_can_probe_handshake():
     bomb = Bomb(1, module_count=1, pool=POOL)
-    assert bomb.inspect("eyes", 0, {"cell": 0}) == {}
-    assert bomb.inspect("book", 0, {"cell": 0}) == {}
+    assert bomb.inspect("deaf", 0, {"cell": 0}) == {}
+    assert bomb.inspect("mute", 0, {"cell": 0}) == {}
 
 
 def test_probe_reports_idle_then_syncing_once_the_window_opens():
     m = Handshake()
     m.generate(random.Random(1), {})
     m.cooldown = 0.5
-    assert m.inspect("hands", {"cell": 0})["text"] == "idle"
+    assert m.inspect("blind", {"cell": 0})["text"] == "idle"
     m.tick(0.4)
-    assert m.inspect("hands", {"cell": 0})["text"] == "idle", "must not open before its own cooldown elapses"
+    assert m.inspect("blind", {"cell": 0})["text"] == "idle", "must not open before its own cooldown elapses"
     m.tick(0.2)
-    assert m.inspect("hands", {"cell": 0})["text"] == "syncing", "must open once cooldown reaches zero"
+    assert m.inspect("blind", {"cell": 0})["text"] == "syncing", "must open once cooldown reaches zero"
 
 
 def test_window_opens_after_cooldown_and_lasts_window_s():
@@ -72,7 +72,7 @@ def test_correct_confirm_does_not_strike_and_closes_the_window():
     assert m.should_confirm
     m.cooldown = 0
     m.tick(0.01)
-    assert m.act("hands", {"confirm": True}) is not Result.STRIKE
+    assert m.act("blind", {"confirm": True}) is not Result.STRIKE
     assert not m.window_open, "a confirm must close the window immediately"
 
 
@@ -82,7 +82,7 @@ def test_wrong_confirm_strikes_and_still_closes_the_window():
     assert not m.should_confirm
     m.cooldown = 0
     m.tick(0.01)
-    assert m.act("hands", {"confirm": True}) is Result.STRIKE
+    assert m.act("blind", {"confirm": True}) is Result.STRIKE
     assert not m.window_open
 
 
@@ -109,7 +109,7 @@ def test_confirming_outside_a_window_is_a_no_op():
     m = Handshake()
     m.generate(random.Random(7), {"sticker": "KOWALSKI"})
     assert not m.window_open
-    assert m.act("hands", {"confirm": True}) is Result.NOTHING
+    assert m.act("blind", {"confirm": True}) is Result.NOTHING
 
 
 def test_confirming_twice_in_the_same_window_only_counts_once():
@@ -117,21 +117,21 @@ def test_confirming_twice_in_the_same_window_only_counts_once():
     m.generate(random.Random(8), {"sticker": "ACME"})
     m.cooldown = 0
     m.tick(0.01)
-    first = m.act("hands", {"confirm": True})
+    first = m.act("blind", {"confirm": True})
     assert first is Result.STRIKE
     # Window is already closed after the first confirm, so a second attempt
     # in the same instant is just a no-op, not a second strike.
-    assert m.act("hands", {"confirm": True}) is Result.NOTHING
+    assert m.act("blind", {"confirm": True}) is Result.NOTHING
 
 
-def test_only_hands_may_confirm():
+def test_only_blind_may_confirm():
     m = Handshake()
     m.generate(random.Random(9), {})
     m.cooldown = 0
     m.tick(0.01)
-    for role in ("eyes", "book", "scope", "dispatch"):
+    for role in ("deaf", "mute", "scope", "dispatch"):
         assert m.act(role, {"confirm": True}) is Result.NOTHING
-    assert m.window_open, "a non-hands act() must not affect the window at all"
+    assert m.window_open, "a non-blind act() must not affect the window at all"
 
 
 def test_sticker_kowalski_requires_confirmation_any_other_sticker_does_not():
@@ -150,7 +150,7 @@ def test_needy_only_bomb_can_never_be_won():
         for m in bomb.modules:
             while not m.window_open:
                 m.tick(1.0)
-            m.act("hands", {"confirm": True})
+            m.act("blind", {"confirm": True})
         bomb._settle(Result.NOTHING)
     assert bomb.phase == "running", \
         "an all-needy bomb reached %r - it must never be winnable" % bomb.phase
@@ -183,7 +183,7 @@ def test_golden_path_survives_many_cycles_with_zero_strikes():
                 if r is Result.STRIKE:
                     strikes += 1
             if m.should_confirm:
-                r = m.act("hands", {"confirm": True})
+                r = m.act("blind", {"confirm": True})
             else:
                 r = m.tick(WINDOW_S + 1)  # correctly let it pass
             if r is Result.STRIKE:
@@ -193,7 +193,7 @@ def test_golden_path_survives_many_cycles_with_zero_strikes():
 
 def test_layout_is_one_button_slot_with_no_window_or_rule_data():
     bomb = Bomb(11, module_count=1, pool=POOL)
-    layout = bomb.snapshot("hands")["layouts"][0]
+    layout = bomb.snapshot("blind")["layouts"][0]
     assert layout["w"] == 1 and layout["h"] == 1
     assert len(layout["slots"]) == 1
     assert layout["slots"][0]["kind"] == "button"
@@ -204,8 +204,8 @@ def test_layout_is_one_button_slot_with_no_window_or_rule_data():
 
 def test_manual_states_the_generic_conditional_not_the_resolved_answer():
     # The manual must print the SAME if/then rule regardless of this round's
-    # actual should_confirm value - resolving it outright would let BOOK
-    # solve without ever hearing EYES' sticker report, breaking the
+    # actual should_confirm value - resolving it outright would let MUTE
+    # solve without ever hearing DEAF's sticker report, breaking the
     # three-key rule.
     m1 = Handshake()
     m1.generate(random.Random(12), {"sticker": "KOWALSKI"})

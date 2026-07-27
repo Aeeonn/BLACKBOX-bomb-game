@@ -17,42 +17,42 @@ from server.modules.m02_ledger import Ledger
 POOL = ["m02"]
 
 
-def test_hands_view_never_carries_a_per_tile_value():
+def test_blind_view_never_carries_a_per_tile_value():
     for seed in range(200):
         m = Bomb(seed, module_count=1, pool=POOL).modules[0]
-        hv = m.views().hands
+        hv = m.views().blind
         assert set(hv.keys()) == {"kind", "count", "resolved", "solved"}, \
-            "seed %d: hands view has an unexpected key %r" % (seed, hv.keys())
+            "seed %d: blind view has an unexpected key %r" % (seed, hv.keys())
 
 
-def test_eyes_view_never_carries_hands_value():
+def test_deaf_view_never_carries_blind_value():
     for seed in range(200):
         m = Bomb(seed, module_count=1, pool=POOL).modules[0]
-        ev = m.views().eyes
+        ev = m.views().deaf
         assert set(ev.keys()) == {"kind", "tiles", "solved"}
         for tile in ev["tiles"]:
             assert set(tile.keys()) == {"value", "resolved"}, \
-                "seed %d: eyes tile has an unexpected key %r" % (seed, tile.keys())
+                "seed %d: deaf tile has an unexpected key %r" % (seed, tile.keys())
 
 
-def test_book_gets_no_tile_values():
+def test_mute_gets_no_tile_values():
     for seed in range(200):
         m = Bomb(seed, module_count=1, pool=POOL).modules[0]
-        bv = m.views().book
+        bv = m.views().mute
         assert set(bv.keys()) <= {"kind", "module", "solved"}
 
 
-def test_only_hands_can_probe_ledger():
+def test_only_blind_can_probe_ledger():
     bomb = Bomb(1, module_count=1, pool=POOL)
-    assert bomb.inspect("eyes", 0, {"cell": 0}) == {}
-    assert bomb.inspect("book", 0, {"cell": 0}) == {}
+    assert bomb.inspect("deaf", 0, {"cell": 0}) == {}
+    assert bomb.inspect("mute", 0, {"cell": 0}) == {}
 
 
-def test_probe_reveals_hands_value_as_text():
+def test_probe_reveals_blind_value_as_text():
     bomb = Bomb(1, module_count=1, pool=POOL)
     m = bomb.modules[0]
-    data = bomb.inspect("hands", 0, {"cell": 0})
-    assert data["text"] == "reads %d" % m.tiles[0]["hands_value"]
+    data = bomb.inspect("blind", 0, {"cell": 0})
+    assert data["text"] == "reads %d" % m.tiles[0]["blind_value"]
 
 
 def test_golden_path_solves_every_seed():
@@ -60,7 +60,7 @@ def test_golden_path_solves_every_seed():
         m = Bomb(seed, module_count=1, pool=POOL).modules[0]
         for i, verdict in m.solution().items():
             action = {"press": i} if verdict == "PRESS" else {"skip": i}
-            assert m.act("hands", action) is not Result.STRIKE, \
+            assert m.act("blind", action) is not Result.STRIKE, \
                 "seed %d: the table's own correct verdict struck" % seed
         assert m.solved, "seed %d: golden path did not solve" % seed
 
@@ -70,7 +70,7 @@ def test_wrong_guess_strikes():
         m = Bomb(seed, module_count=1, pool=POOL).modules[0]
         verdict = m.solution()[0]
         wrong_action = {"skip": 0} if verdict == "PRESS" else {"press": 0}
-        assert m.act("hands", wrong_action) is Result.STRIKE, \
+        assert m.act("blind", wrong_action) is Result.STRIKE, \
             "seed %d: wrong guess on tile 0 did not strike" % seed
 
 
@@ -78,14 +78,14 @@ def test_resolving_a_tile_twice_is_a_no_op():
     m = Bomb(1, module_count=1, pool=POOL).modules[0]
     verdict = m.solution()[0]
     action = {"press": 0} if verdict == "PRESS" else {"skip": 0}
-    m.act("hands", action)
-    assert m.act("hands", action) is Result.NOTHING, \
+    m.act("blind", action)
+    assert m.act("blind", action) is Result.NOTHING, \
         "acting on an already-resolved tile again must be a no-op, not a second strike"
 
 
-def test_only_hands_may_act():
+def test_only_blind_may_act():
     m = Bomb(3, module_count=1, pool=POOL).modules[0]
-    for role in ("eyes", "book", "scope", "dispatch"):
+    for role in ("deaf", "mute", "scope", "dispatch"):
         assert m.act(role, {"press": 0}) is Result.NOTHING
 
 
@@ -113,7 +113,7 @@ def test_badge_red_swaps_the_table():
 
 def test_layout_is_a_3x2_tile_grid_with_no_verdict_data():
     bomb = Bomb(5, module_count=1, pool=POOL)
-    layout = bomb.snapshot("hands")["layouts"][0]
+    layout = bomb.snapshot("blind")["layouts"][0]
     assert layout["w"] == 3 and layout["h"] == 2
     assert [s["idx"] for s in layout["slots"]] == list(range(6))
     assert all(s["kind"] == "tile" for s in layout["slots"])

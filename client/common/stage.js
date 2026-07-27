@@ -16,15 +16,15 @@
 // client-side; per AGENTS.md T11, the emitted gesture is authoritative once
 // sent - the server does not re-validate *how* a gesture was produced.
 
-const ROLE_ORDER = ["hands", "eyes", "book", "scope", "dispatch"];
+const ROLE_ORDER = ["blind", "deaf", "mute", "scope", "dispatch"];
 
 // Avatar legend colours only. Deliberately NOT the same hues M1 uses for wire
 // colours (red/blue/yellow/white/black/green), so a bust on the stage can
 // never be mistaken for a piece of module PERCEPTION.
 const ROLE_COLOUR = {
-  hands: "#7d8fce",
-  eyes: "#cd8b62",
-  book: "#a678b0",
+  blind: "#7d8fce",
+  deaf: "#cd8b62",
+  mute: "#a678b0",
   scope: "#5fae96",
   dispatch: "#b8637e",
 };
@@ -80,7 +80,7 @@ export function ellipsePoint(cx, cy, rx, ry, angleDeg) {
 }
 
 // Small shared lookup for "find one role's row in a presence payload" - used
-// by eyes.html/book.html/scope.html for both HANDS' probe echo (T9) and
+// by deaf.html/mute.html/scope.html for both BLIND's probe echo (T9) and
 // commit-charge ring (T10), so this one tiny piece of bookkeeping doesn't
 // have to be reinvented a third time by a future ticket.
 export function findPlayer(presence, role) {
@@ -176,7 +176,7 @@ export function init(canvasEl, role, send) {
 }
 
 // PRESENCE in. Only ever stores role/connected/moving, and - only when the
-// server actually included them (never for HANDS viewing other players; see
+// server actually included them (never for BLIND viewing other players; see
 // server/stage.py) - yaw/pitch/gesture. Never stores pointer: that's T12's
 // job, not smuggled in early unused.
 export function setPresence(payload) {
@@ -225,8 +225,8 @@ function tick(ts) {
     lastPoseSentAt = ts;
     const yaw = parallax.x * YAW_RANGE;
     const pitch = parallax.y * PITCH_RANGE;
-    // "manual" stands in for looking down at BOOK's lectern until T12 gives
-    // BOOK an actual in-world manual object to look at; "bomb" is the
+    // "manual" stands in for looking down at MUTE's lectern until T12 gives
+    // MUTE an actual in-world manual object to look at; "bomb" is the
     // sensible default since that's what's in front of the camera otherwise.
     const gaze = pitch > MANUAL_GAZE_PITCH ? "manual" : "bomb";
     sendFn({ type: "pose", yaw, pitch, gaze });
@@ -298,25 +298,25 @@ function drawSeat(seat, index, total, w, h, ts) {
   const base = seat.connected ? 1 : 0.28;
   let alpha = base;
   if (seat.connected && !seat.hasDetail && seat.moving) {
-    // HANDS' "sonar" view of others: a pulse on movement instead of a
-    // rotating head, because HANDS never receives yaw/pitch/gesture for
+    // BLIND's "sonar" view of others: a pulse on movement instead of a
+    // rotating head, because BLIND never receives yaw/pitch/gesture for
     // other players - AGENTS.md hard rule 5.
     alpha = base * (0.55 + 0.45 * Math.sin(ts / 150));
   }
   const yaw = seat.hasDetail ? seat.displayYaw : 0;
 
   // Gesture animation: a brief bob (nod) or wag (shake) on the head only -
-  // gated on hasDetail, same as yaw/pitch, so HANDS never animates other
+  // gated on hasDetail, same as yaw/pitch, so BLIND never animates other
   // seats this way either (hard rule 5 holds structurally, not by role-check).
   let bobY = 0, wagX = 0;
   if (seat.hasDetail && seat.gesture === "nod") bobY = Math.sin(ts / 90) * 5;
   if (seat.hasDetail && seat.gesture === "shake") wagX = Math.sin(ts / 70) * 6;
 
-  // T12: BOOK's console is a fixed prop at BOOK's seat, drawn behind the
+  // T12: MUTE's console is a fixed prop at MUTE's seat, drawn behind the
   // bust. It is pure WORLD geometry - the same empty card-slot shape for
   // every viewer, always - so it cannot leak which card was last flashed
-  // (that stays EYES-only, via eyes.html's own #flash element, unchanged).
-  if (seat.role === "book") drawBookDesk(p, alpha);
+  // (that stays DEAF-only, via deaf.html's own #flash element, unchanged).
+  if (seat.role === "mute") drawMuteDesk(p, alpha);
 
   ctx.save();
   ctx.globalAlpha = alpha;
@@ -342,8 +342,8 @@ function drawSeat(seat, index, total, w, h, ts) {
   // role's identity is already shown in plain text by the label below, and
   // in the roster). Only drawn for seats that are actually occupied, same
   // as the head/shoulders' own connected-vs-empty styling above.
-  if (seat.connected && seat.role === "hands") drawBlindfold(wagX, -6 + bobY);
-  if (seat.connected && seat.role === "eyes") drawEarmuffs(wagX, -6 + bobY);
+  if (seat.connected && seat.role === "blind") drawBlindfold(wagX, -6 + bobY);
+  if (seat.connected && seat.role === "deaf") drawEarmuffs(wagX, -6 + bobY);
 
   ctx.restore();
 
@@ -385,11 +385,11 @@ function drawEarmuffs(cx, cy) {
   ctx.restore();
 }
 
-// A small lectern/console below BOOK's seat: a flat board with three empty
+// A small lectern/console below MUTE's seat: a flat board with three empty
 // card slots. Always the same shape, connected or not, pointing or not -
 // there is no card content drawn here at all, so this can never become a
-// second, unfiltered way to see what BOOK just flashed.
-function drawBookDesk(p, alpha) {
+// second, unfiltered way to see what MUTE just flashed.
+function drawMuteDesk(p, alpha) {
   const w = 50, h = 16, top = p.y + 26;
   ctx.save();
   ctx.globalAlpha = Math.max(alpha, 0.35);

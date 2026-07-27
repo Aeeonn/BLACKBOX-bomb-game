@@ -1,7 +1,7 @@
 
 """THE LEAK TEST. Run after every change. If this fails, the game is broken.
 
-Design Law 3: the HANDS client never RECEIVES colours; the EYES client never
+Design Law 3: the BLIND client never RECEIVES colours; the DEAF client never
 RECEIVES textures. Not hidden in CSS - not present in the payload.
 """
 import json
@@ -11,8 +11,8 @@ from server.bomb import Bomb
 from server.modules.m01_braid_hue import COLOURS, TEXTURES
 
 FORBIDDEN = {
-    "hands": COLOURS,
-    "eyes": TEXTURES,
+    "blind": COLOURS,
+    "deaf": TEXTURES,
     "scope": COLOURS + TEXTURES,
 }
 
@@ -32,16 +32,16 @@ def test_no_cross_role_leak():
 
 def test_probe_is_the_only_texture_source():
     bomb = Bomb(1)
-    assert "texture" not in json.dumps(bomb.snapshot("hands"))
-    assert bomb.inspect("hands", 0, {"cell": 0})["text"]
+    assert "texture" not in json.dumps(bomb.snapshot("blind"))
+    assert bomb.inspect("blind", 0, {"cell": 0})["text"]
 
 
-def test_eyes_cannot_probe():
-    assert Bomb(1).inspect("eyes", 0, {"cell": 0}) == {}
+def test_deaf_cannot_probe():
+    assert Bomb(1).inspect("deaf", 0, {"cell": 0}) == {}
 
 
-def test_book_gets_no_bomb_state():
-    snap = Bomb(2).snapshot("book")
+def test_mute_gets_no_bomb_state():
+    snap = Bomb(2).snapshot("mute")
     assert snap["flags"] == {}
     for m in snap["modules"]:
         assert set(m.keys()) <= {"kind", "module", "solved"}

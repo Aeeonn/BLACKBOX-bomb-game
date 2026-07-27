@@ -22,14 +22,14 @@ class Result(Enum):
 
 @dataclass
 class Views:
-    hands: dict
-    eyes: dict
-    book: dict
+    blind: dict
+    deaf: dict
+    mute: dict
     scope: dict | None = None
 
     def for_role(self, role: str) -> dict:
-        return {"hands": self.hands, "eyes": self.eyes,
-                "book": self.book, "scope": self.scope or {}}.get(role, {})
+        return {"blind": self.blind, "deaf": self.deaf,
+                "mute": self.mute, "scope": self.scope or {}}.get(role, {})
 
 
 @dataclass
@@ -92,7 +92,7 @@ class Module(ABC):
     def inspect(self, role: str, query: dict) -> dict:
         """Private read-only probe, sent to one socket and never broadcast.
 
-        This is how HANDS reads texture. Because it is not in views(), it cannot be
+        This is how BLIND reads texture. Because it is not in views(), it cannot be
         recovered by scrolling back through received state in DevTools.
         """
         return {}
@@ -102,4 +102,4 @@ class Module(ABC):
 
     @abstractmethod
     def manual_page(self) -> str:
-        """HTML for this instance's generated rules. BOOK only."""
+        """HTML for this instance's generated rules. MUTE only."""

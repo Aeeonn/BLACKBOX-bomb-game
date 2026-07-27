@@ -63,7 +63,7 @@ function updateLobby(m) {
   const btn = document.getElementById("start");
   const ok = coreConnected(m.roster);
   btn.disabled = !ok;
-  btn.title = ok ? "" : "Waiting for " + DISPLAY_NAME.hands + ", " + DISPLAY_NAME.eyes + " and " + DISPLAY_NAME.book + " to connect";
+  btn.title = ok ? "" : "Waiting for " + DISPLAY_NAME.blind + ", " + DISPLAY_NAME.deaf + " and " + DISPLAY_NAME.mute + " to connect";
 }
 on("lobby", updateLobby);
 
@@ -78,9 +78,9 @@ readyBtn.onclick = () => {
 
 let lastPayload = null, presence = null;
 initStage(document.getElementById("stage"), ROLE, send);
-on("presence", m => { presence = m.payload; setPresence(m.payload); if (lastPayload) drawBookShells(lastPayload); });
+on("presence", m => { presence = m.payload; setPresence(m.payload); if (lastPayload) drawMuteShells(lastPayload); });
 
-// BOOK's shell: slot indices only, no colour or texture - BOOK's own views()
+// MUTE's shell: slot indices only, no colour or texture - MUTE's own views()
 // never carries per-slot data in the first place, so there is nothing here
 // that could leak. Reuses one .bombface-wrap per module across updates
 // rather than rebuilding the DOM every state tick.
@@ -88,23 +88,23 @@ on("presence", m => { presence = m.payload; setPresence(m.payload); if (lastPayl
 // T12: clicking a module's shell points at it (module-level only - the
 // server drops any cell we send unless precise_pointing is on, which
 // nothing enables yet), so we don't pretend to track a cell locally either.
-// Clicking the module BOOK is already pointing at again clears it.
+// Clicking the module MUTE is already pointing at again clears it.
 function sendPoint(i) {
-  const bp = findPlayer(presence, "book");
+  const bp = findPlayer(presence, "mute");
   const already = bp && bp.pointer && bp.pointer.module === i;
   send({ type: "point", target: already ? {} : { module: i } });
 }
 
-function drawBookShells(payload) {
+function drawMuteShells(payload) {
   const layouts = payload.layouts || [];
   const container = document.getElementById("bombfaces");
   while (container.children.length > layouts.length) {
     container.removeChild(container.lastChild);
   }
-  const hp = findPlayer(presence, "hands");
+  const hp = findPlayer(presence, "blind");
   const probe = hp && hp.probe;
   const charge = hp && hp.charge;
-  const bp = findPlayer(presence, "book");
+  const bp = findPlayer(presence, "mute");
   const pointedModule = bp && bp.pointer ? bp.pointer.module : null;
   layouts.forEach((layout, i) => {
     let box = container.children[i];
@@ -140,7 +140,7 @@ on("state", s => {
   updateFeedback(s.payload.strikes, s.payload.modules.filter(mv => mv.solved).length, s.payload.phase);
   setBomb(s.payload);
   lastPayload = s.payload;
-  drawBookShells(s.payload);
+  drawMuteShells(s.payload);
 });
 on("log", m => logLine(m.text));
 connect();

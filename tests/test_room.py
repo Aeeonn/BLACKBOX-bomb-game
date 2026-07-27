@@ -74,51 +74,51 @@ def test_start_is_a_no_op_while_a_round_is_running():
 
 def test_roster_reports_connected_ready_and_required():
     room = Room("OOOO")
-    room.attach("hands", _RecordingSocket())
+    room.attach("blind", _RecordingSocket())
     room.attach("scope", _RecordingSocket())
     asyncio.run(room.handle("scope", room.sockets["scope"], {"type": "ready"}))
 
     by_role = {r["role"]: r for r in room.roster()}
-    assert by_role["hands"] == {"role": "hands", "connected": True, "ready": False, "required": True}
+    assert by_role["blind"] == {"role": "blind", "connected": True, "ready": False, "required": True}
     assert by_role["scope"] == {"role": "scope", "connected": True, "ready": True, "required": False}
-    assert by_role["eyes"] == {"role": "eyes", "connected": False, "ready": False, "required": True}
-    assert by_role["book"]["required"] is True
+    assert by_role["deaf"] == {"role": "deaf", "connected": False, "ready": False, "required": True}
+    assert by_role["mute"]["required"] is True
     assert by_role["dispatch"]["required"] is False
 
 
 def test_ready_defaults_to_false_and_can_be_toggled_off_again():
     room = Room("PPPP")
     sock = _RecordingSocket()
-    room.attach("book", sock)
+    room.attach("mute", sock)
 
-    assert next(r for r in room.roster() if r["role"] == "book")["ready"] is False
+    assert next(r for r in room.roster() if r["role"] == "mute")["ready"] is False
 
-    asyncio.run(room.handle("book", sock, {"type": "ready", "value": True}))
-    assert next(r for r in room.roster() if r["role"] == "book")["ready"] is True
+    asyncio.run(room.handle("mute", sock, {"type": "ready", "value": True}))
+    assert next(r for r in room.roster() if r["role"] == "mute")["ready"] is True
 
-    asyncio.run(room.handle("book", sock, {"type": "ready", "value": False}))
-    assert next(r for r in room.roster() if r["role"] == "book")["ready"] is False
+    asyncio.run(room.handle("mute", sock, {"type": "ready", "value": False}))
+    assert next(r for r in room.roster() if r["role"] == "mute")["ready"] is False
 
 
 def test_ready_clears_on_detach_so_a_reconnect_starts_unready():
     room = Room("QQQQ")
     sock = _RecordingSocket()
-    room.attach("eyes", sock)
-    asyncio.run(room.handle("eyes", sock, {"type": "ready"}))
-    assert next(r for r in room.roster() if r["role"] == "eyes")["ready"] is True
+    room.attach("deaf", sock)
+    asyncio.run(room.handle("deaf", sock, {"type": "ready"}))
+    assert next(r for r in room.roster() if r["role"] == "deaf")["ready"] is True
 
-    room.detach("eyes", sock)
+    room.detach("deaf", sock)
 
     new_sock = _RecordingSocket()
-    room.attach("eyes", new_sock)
-    assert next(r for r in room.roster() if r["role"] == "eyes")["ready"] is False, \
+    room.attach("deaf", new_sock)
+    assert next(r for r in room.roster() if r["role"] == "deaf")["ready"] is False, \
         "a stale ready flag from before a disconnect must not survive a reconnect"
 
 
 def test_lobby_broadcast_carries_a_roster_not_a_bare_role_list():
     room = Room("RRRR")
     sock = _RecordingSocket()
-    room.attach("hands", sock)
+    room.attach("blind", sock)
 
     asyncio.run(room.broadcast_state())
 
@@ -135,26 +135,26 @@ def test_is_paused_false_before_any_bomb_exists():
 
 def test_is_paused_true_once_a_required_role_disconnects_mid_round():
     room = Room("TTTT")
-    hands, eyes, book = _RecordingSocket(), _RecordingSocket(), _RecordingSocket()
-    room.attach("hands", hands)
-    room.attach("eyes", eyes)
-    room.attach("book", book)
+    blind, deaf, mute = _RecordingSocket(), _RecordingSocket(), _RecordingSocket()
+    room.attach("blind", blind)
+    room.attach("deaf", deaf)
+    room.attach("mute", mute)
     asyncio.run(room.start(modules=1))
     assert room.is_paused() is False
 
-    room.detach("book", book)
+    room.detach("mute", mute)
     assert room.is_paused() is True, "losing a required role mid-round must pause the timer"
 
-    room.attach("book", _RecordingSocket())
+    room.attach("mute", _RecordingSocket())
     assert room.is_paused() is False, "reconnecting the missing required role must unpause"
 
 
 def test_is_paused_ignores_optional_roles_disconnecting():
     room = Room("UUUU")
-    hands, eyes, book = _RecordingSocket(), _RecordingSocket(), _RecordingSocket()
-    room.attach("hands", hands)
-    room.attach("eyes", eyes)
-    room.attach("book", book)
+    blind, deaf, mute = _RecordingSocket(), _RecordingSocket(), _RecordingSocket()
+    room.attach("blind", blind)
+    room.attach("deaf", deaf)
+    room.attach("mute", mute)
     room.attach("scope", _RecordingSocket())
     asyncio.run(room.start(modules=1))
 
@@ -165,18 +165,18 @@ def test_is_paused_ignores_optional_roles_disconnecting():
 
 def test_tick_once_freezes_time_while_paused_and_resumes_without_a_jump():
     room = Room("VVVV")
-    hands, eyes, book = _RecordingSocket(), _RecordingSocket(), _RecordingSocket()
-    room.attach("hands", hands)
-    room.attach("eyes", eyes)
-    room.attach("book", book)
+    blind, deaf, mute = _RecordingSocket(), _RecordingSocket(), _RecordingSocket()
+    room.attach("blind", blind)
+    room.attach("deaf", deaf)
+    room.attach("mute", mute)
     asyncio.run(room.start(modules=1, seconds=100.0))
     start_time = room.bomb.time_left
 
-    room.detach("book", book)
+    room.detach("mute", mute)
     asyncio.run(room._tick_once(5.0))  # a long fake dt - must be fully ignored while paused
     assert room.bomb.time_left == start_time, "time must not move at all while paused"
 
-    room.attach("book", _RecordingSocket())
+    room.attach("mute", _RecordingSocket())
     asyncio.run(room._tick_once(2.0))
     assert room.bomb.time_left == start_time - 2.0, \
         "resuming must apply only the new dt, never the dt accumulated while paused"
@@ -184,18 +184,18 @@ def test_tick_once_freezes_time_while_paused_and_resumes_without_a_jump():
 
 def test_state_broadcast_includes_a_paused_flag_for_every_role():
     room = Room("WWWW")
-    hands, eyes, book = _RecordingSocket(), _RecordingSocket(), _RecordingSocket()
-    room.attach("hands", hands)
-    room.attach("eyes", eyes)
-    room.attach("book", book)
+    blind, deaf, mute = _RecordingSocket(), _RecordingSocket(), _RecordingSocket()
+    room.attach("blind", blind)
+    room.attach("deaf", deaf)
+    room.attach("mute", mute)
     asyncio.run(room.start(modules=1))
 
     asyncio.run(room.broadcast_state())
-    assert hands.sent[-1]["payload"]["paused"] is False
+    assert blind.sent[-1]["payload"]["paused"] is False
 
-    room.detach("book", book)
+    room.detach("mute", mute)
     asyncio.run(room.broadcast_state())
-    assert hands.sent[-1]["payload"]["paused"] is True
+    assert blind.sent[-1]["payload"]["paused"] is True
 
 
 def test_detaching_mid_round_immediately_rebroadcasts_the_paused_state():
@@ -203,14 +203,14 @@ def test_detaching_mid_round_immediately_rebroadcasts_the_paused_state():
     # without needing a real websocket - broadcast_state() is called once
     # right after detach(), same as main.py now does.
     room = Room("XXXX")
-    hands, eyes, book = _RecordingSocket(), _RecordingSocket(), _RecordingSocket()
-    room.attach("hands", hands)
-    room.attach("eyes", eyes)
-    room.attach("book", book)
+    blind, deaf, mute = _RecordingSocket(), _RecordingSocket(), _RecordingSocket()
+    room.attach("blind", blind)
+    room.attach("deaf", deaf)
+    room.attach("mute", mute)
     asyncio.run(room.start(modules=1))
-    hands.sent.clear()
+    blind.sent.clear()
 
-    room.detach("book", book)
+    room.detach("mute", mute)
     asyncio.run(room.broadcast_state())
 
-    assert hands.sent[-1]["payload"]["paused"] is True
+    assert blind.sent[-1]["payload"]["paused"] is True

@@ -11,8 +11,8 @@
 <div id="links" style="margin-top:20px;line-height:2"></div>
 <script type="module">
 import { DISPLAY_NAME } from "/common/roster.js";
-const roles = ["hands", "eyes", "book", "scope", "dispatch"];
-const REQUIRED = new Set(["hands", "eyes", "book"]);
+const roles = ["blind", "deaf", "mute", "scope", "dispatch"];
+const REQUIRED = new Set(["blind", "deaf", "mute"]);
 
 // Falls back to an all-disconnected roster before the first poll resolves,
 // so the links still render immediately on click rather than waiting on a
@@ -32,7 +32,7 @@ function render(code, roster) {
       return '<a class="' + cls + '" href="/' + r.role + '.html?room=' + code + '&role=' + r.role + '" target="_blank">' +
         (DISPLAY_NAME[r.role] || r.role.toUpperCase()) + req + mark + '</a>';
     }).join("<br>") +
-    '<br><a style="color:#e8e4d8" href="/manual/' + code + '" target="_blank">MANUAL (' + DISPLAY_NAME.book + ' prints this)</a>';
+    '<br><a style="color:#e8e4d8" href="/manual/' + code + '" target="_blank">MANUAL (' + DISPLAY_NAME.mute + ' prints this)</a>';
 }
 
 // T13: polls the roster metadata endpoint (never bomb state - see

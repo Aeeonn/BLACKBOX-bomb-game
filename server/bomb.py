@@ -12,7 +12,7 @@ STICKERS = ["ACME", "KOWALSKI", "VOSS"]
 
 # Every role the game currently supports. Defined here (not imported from
 # room.py) to avoid a circular import, since Room already imports Bomb.
-ALL_ROLES = {"hands", "eyes", "book", "scope", "dispatch"}
+ALL_ROLES = {"blind", "deaf", "mute", "scope", "dispatch"}
 
 
 class Bomb:
@@ -22,12 +22,12 @@ class Bomb:
         self.seed = seed
         rng = random.Random(seed)
 
-        self.flags_hands = {
+        self.flags_blind = {
             "casing": rng.choice(CASINGS),
             "corner_screw": rng.choice(["present", "missing"]),
             "temperature": rng.choice(["cool", "warm"]),
         }
-        self.flags_eyes = {
+        self.flags_deaf = {
             "serial": "".join(rng.choice(string.ascii_uppercase + string.digits)
                               for _ in range(6)),
             "badge": rng.choice(BADGES),
@@ -39,13 +39,13 @@ class Bomb:
             "jumpers": rng.randint(0, 4),
             "capacitor": rng.choice(["ok", "bulging"]),
         }
-        all_flags = {**self.flags_hands, **self.flags_eyes, **self.flags_scope}
+        all_flags = {**self.flags_blind, **self.flags_deaf, **self.flags_scope}
 
         # Pick modules from the registry rather than hardcoding one. `pool`
         # narrows which ids are in play (defaults to everything registered);
         # `roles` is who's actually connected (defaults to all five) and
         # excludes any module whose requires_roles isn't fully covered - e.g.
-        # a hands/eyes/book room must never draw a SCOPE-dependent module.
+        # a blind/deaf/mute room must never draw a SCOPE-dependent module.
         roles = ALL_ROLES if roles is None else roles
         candidate_ids = list(REGISTRY.keys()) if pool is None else pool
         eligible = [mid for mid in candidate_ids
@@ -69,7 +69,7 @@ class Bomb:
         # T18: Mirror modifier - see _mirror_index()/_mirror_view() below for
         # the actual transform. Implemented entirely here, not in any module
         # file - every module keeps acting/viewing in its own true, unflipped
-        # numbering; Bomb translates HANDS' indices on the way in/out.
+        # numbering; Bomb translates BLIND's indices on the way in/out.
         self.mirror = mirror
 
     def _settle(self, result: Result) -> None:
@@ -94,13 +94,13 @@ class Bomb:
         return count - 1 - i
 
     def _mirror_action(self, action: dict, count: int) -> dict:
-        """T18: flips any in-range integer value in an incoming HANDS action
+        """T18: flips any in-range integer value in an incoming BLIND action
         dict, using the module's own slot count from layout(). This is
         deliberately generic across every module's differently-named action
         keys (cut/discharge/press/skip/purge/lock) rather than special-casing
         each one, which is what keeps this a Bomb-only change. It relies on
         the convention every current module follows: the only integers a
-        HANDS action ever carries are slot indices in range [0, count). A
+        BLIND action ever carries are slot indices in range [0, count). A
         future module with some OTHER integer parameter (not a cell index)
         would need this reconsidered - flag it if that ever comes up.
         """
@@ -113,11 +113,11 @@ class Bomb:
         return out
 
     def _mirror_view(self, view: dict, count: int) -> dict:
-        """T18: HANDS' own per-cell state arrays (e.g. "cut", "discharged",
-        "resolved") are reversed so that whatever HANDS just acted on (using
-        their own, already-mirrored index) shows up at the SAME index HANDS
-        used - the flip is entirely self-consistent from HANDS' side. Only
-        called for the "hands" role's view; EYES/BOOK/SCOPE/DISPATCH never
+        """T18: BLIND's own per-cell state arrays (e.g. "cut", "discharged",
+        "resolved") are reversed so that whatever BLIND just acted on (using
+        their own, already-mirrored index) shows up at the SAME index BLIND
+        used - the flip is entirely self-consistent from BLIND's side. Only
+        called for the "blind" role's view; DEAF/MUTE/SCOPE/DISPATCH never
         pass through here and always see the module's true numbering.
         """
         out = dict(view)
@@ -130,7 +130,7 @@ class Bomb:
         if self.phase != "running" or not (0 <= index < len(self.modules)):
             return Result.NOTHING
         module = self.modules[index]
-        if role == "hands" and self.mirror:
+        if role == "blind" and self.mirror:
             action = self._mirror_action(action, len(module.layout().slots))
         r = module.act(role, action)
         self._settle(r)
@@ -140,13 +140,13 @@ class Bomb:
         if not (0 <= index < len(self.modules)):
             return {}
         module = self.modules[index]
-        if role == "hands" and self.mirror and "cell" in query:
+        if role == "blind" and self.mirror and "cell" in query:
             count = len(module.layout().slots)
             true_cell = self._mirror_index(int(query["cell"]), count)
             result = module.inspect(role, {**query, "cell": true_cell})
             if "cell" in result:
-                # Flip the true cell back to HANDS' own number, so the probe
-                # result HANDS receives still describes "their" cell, not the
+                # Flip the true cell back to BLIND's own number, so the probe
+                # result BLIND receives still describes "their" cell, not the
                 # module's internal one - see _mirror_index()'s involutive note.
                 result = {**result, "cell": self._mirror_index(result["cell"], count)}
             return result
@@ -164,12 +164,12 @@ class Bomb:
             self._settle(m.tick(dt))
 
     def snapshot(self, role: str) -> dict:
-        flags = {"hands": self.flags_hands, "eyes": self.flags_eyes,
-                 "scope": self.flags_scope, "book": {}}.get(role, {})
+        flags = {"blind": self.flags_blind, "deaf": self.flags_deaf,
+                 "scope": self.flags_scope, "mute": {}}.get(role, {})
         modules_out = []
         for m in self.modules:
             view = m.views().for_role(role)
-            if role == "hands" and self.mirror:
+            if role == "blind" and self.mirror:
                 view = self._mirror_view(view, len(m.layout().slots))
             modules_out.append(view)
         return {
@@ -183,7 +183,7 @@ class Bomb:
             # Kept as its own top-level key (not merged into "modules") so the
             # role-filtered PERCEPTION view above is untouched by this addition.
             # Mirror never touches this - rule 3 says one shared geometry for
-            # everyone; only HANDS' own indices into that geometry are flipped.
+            # everyone; only BLIND's own indices into that geometry are flipped.
             "layouts": [dataclasses.asdict(m.layout()) for m in self.modules],
         }
 
@@ -209,7 +209,7 @@ class Bomb:
         # regardless of how wide any given module happens to be.
         if self.mirror:
             html += ('<p class="mirror-note">&#9888; MIRRORED: every wired, tiled, or vented '
-                     "module this round is mirrored for HANDS. Where EYES calls out the Nth "
-                     "position counting from their left, HANDS must act on the Nth position "
+                     "module this round is mirrored for BLIND. Where DEAF calls out the Nth "
+                     "position counting from their left, BLIND must act on the Nth position "
                      "counting from their own RIGHT instead (and vice versa).</p>")
         return html

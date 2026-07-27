@@ -3,15 +3,15 @@
 // it is identical for every viewer, so unlike stage.js/bombface.js this file
 // has zero filtering concerns: nothing here is PRESENCE or PERCEPTION.
 
-export const REQUIRED_ROLES = ["hands", "eyes", "book"];
+export const REQUIRED_ROLES = ["blind", "deaf", "mute"];
 
-// T13.5: what players actually see on screen. Internal role ids (hands,
-// eyes, book, scope, dispatch) never change - they're the wire protocol,
+// T13.5: what players actually see on screen. Internal role ids (blind,
+// deaf, mute, scope, dispatch) never change - they're the wire protocol,
 // the URL ?role= param, and every server-side check. This is the ONE place
 // that maps an id to the label a human reads, so every page stays in sync
 // if the names ever change again.
 export const DISPLAY_NAME = {
-  hands: "BLIND", eyes: "DEAF", book: "MUTE", scope: "SCOPE", dispatch: "DISPATCH",
+  blind: "BLIND", deaf: "DEAF", mute: "MUTE", scope: "SCOPE", dispatch: "DISPATCH",
 };
 
 // Reminder text for each role's own Discord settings and who they talk to -
@@ -19,25 +19,25 @@ export const DISPLAY_NAME = {
 // call): other players' nods/shakes are the in-game head avatar driven by
 // mouse-look (see stage.js/T11), so nothing here ever mentions a camera.
 export const COMMS = {
-  hands: "You are BLIND. Voice NORMAL in Discord. You're the only one who can touch the bomb \u2014 describe what you feel to MUTE and DEAF.",
-  eyes: "You are DEAF. Deafen yourself in Discord \u2014 you must not hear anyone. Tell BLIND and MUTE what you see.",
-  book: "You are MUTE. Mute yourself in Discord \u2014 you cannot speak. Nod, shake your head, and flash cards to signal DEAF. You hear everyone.",
+  blind: "You are BLIND. Voice NORMAL in Discord. You're the only one who can touch the bomb \u2014 describe what you feel to MUTE and DEAF.",
+  deaf: "You are DEAF. Deafen yourself in Discord \u2014 you must not hear anyone. Tell BLIND and MUTE what you see.",
+  mute: "You are MUTE. Mute yourself in Discord \u2014 you cannot speak. Nod, shake your head, and flash cards to signal DEAF. You hear everyone.",
   scope: "You are SCOPE. Mute yourself in Discord \u2014 you cannot speak. (A drawing canvas to MUTE is coming in a later update \u2014 for now, just listen in.)",
   dispatch: "You are DISPATCH. Voice normal in Discord. Watch the big picture \u2014 timer, strikes, alarms \u2014 and call it out to BLIND.",
 };
 
 // Polish pass: a one-time "how do I actually play this" explainer per role,
 // shown behind a collapsed toggle (see the .help-toggle/.help-panel wiring
-// in hands/eyes/book.html) so it doesn't clutter the page for repeat
+// in blind/deaf/mute.html) so it doesn't clutter the page for repeat
 // players, but a brand-new player doesn't need it explained over voice.
 export const HELP = {
-  hands: "Use LEFT/RIGHT arrows to move your probe between cells (or turn a Gauge module's dial). Click a cell to select it directly. "
+  blind: "Use LEFT/RIGHT arrows to move your probe between cells (or turn a Gauge module's dial). Click a cell to select it directly. "
     + "Hold the button shown below the bomb face - or its keyboard shortcut letter - for the number of seconds shown to commit: "
     + "cut a wire, discharge it first if it's warm, press or skip a tile, purge a vent, or lock in a gauge reading. "
     + "TAB switches to the next module if there's more than one.",
-  eyes: "You see full detail on the bomb - colours, textures, printed numbers - but you cannot hear anyone. "
+  deaf: "You see full detail on the bomb - colours, textures, printed numbers - but you cannot hear anyone. "
     + "Call out what you see so BLIND and MUTE can act on it. TAB switches to the next module.",
-  book: "You hear everyone but cannot speak. Your mouse controls your head - look around, and quick shakes/nods are picked up "
+  mute: "You hear everyone but cannot speak. Your mouse controls your head - look around, and quick shakes/nods are picked up "
     + "automatically and shown to everyone. Use the flashcards below to signal DEAF (2 second cooldown). Click a module's shell "
     + "to point at it for everyone to see. Your manual (right panel, or OPEN MANUAL to print it) holds the answers - read it aloud "
     + "to guide BLIND and DEAF.",
@@ -46,7 +46,7 @@ export const HELP = {
   dispatch: "You see the big picture only - timer, strikes, and alarms - never any module detail. Call out what you see to BLIND.",
 };
 
-// True once every required seat (hands/eyes/book) shows connected:true.
+// True once every required seat (blind/deaf/mute) shows connected:true.
 // Deliberately ignores "ready" - see the T13 plan note: ARM only checks who
 // is actually present, not whether they've clicked the READY button.
 export function coreConnected(roster) {

@@ -1,7 +1,7 @@
 // Polish pass: strike/solved feedback. A strike or a solved module was
 // nearly silent before this - the counter just changed. This file adds a
-// short audio cue (HANDS/BOOK only, reusing timer-audio.js's existing
-// AudioContext + role gate - EYES must never hear it, same reasoning as the
+// short audio cue (BLIND/MUTE only, reusing timer-audio.js's existing
+// AudioContext + role gate - DEAF must never hear it, same reasoning as the
 // timer tick) and a brief full-screen colour flash (every role - strikes and
 // solved-count are already broadcast to everyone via the existing "state"
 // message, so a flash reacting to them leaks nothing new).

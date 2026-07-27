@@ -1,7 +1,7 @@
 
 """T5: Bomb selects modules from REGISTRY by id instead of hardcoding one,
 and excludes any module whose requires_roles isn't satisfied by who is
-connected. A hands/eyes/book room must never generate a SCOPE-dependent
+connected. A blind/deaf/mute room must never generate a SCOPE-dependent
 module.
 """
 import asyncio
@@ -26,7 +26,7 @@ class _FakeScopeOnly(Module):
         self.solved = False
 
     def views(self):
-        return Views(hands={}, eyes={}, book={}, scope={"kind": "fake"})
+        return Views(blind={}, deaf={}, mute={}, scope={"kind": "fake"})
 
     def layout(self):
         return Layout(w=1, h=1, slots=[])
@@ -57,8 +57,8 @@ def test_pool_selects_by_id_not_a_hardcoded_class():
     assert all(m.id == "test_scope_only" for m in bomb.modules)
 
 
-def test_hands_eyes_book_room_never_gets_the_scope_only_module():
-    roles = {"hands", "eyes", "book"}
+def test_blind_deaf_mute_room_never_gets_the_scope_only_module():
+    roles = {"blind", "deaf", "mute"}
     pool = ["m01", "test_scope_only"]
     for seed in range(200):
         bomb = Bomb(seed, module_count=4, pool=pool, roles=roles)
@@ -67,7 +67,7 @@ def test_hands_eyes_book_room_never_gets_the_scope_only_module():
 
 
 def test_scope_room_can_get_the_scope_only_module():
-    roles = {"hands", "eyes", "book", "scope"}
+    roles = {"blind", "deaf", "mute", "scope"}
     pool = ["m01", "test_scope_only"]
     seen = set()
     for seed in range(200):
@@ -78,12 +78,12 @@ def test_scope_room_can_get_the_scope_only_module():
 
 def test_no_eligible_module_raises_instead_of_crashing_obscurely():
     with pytest.raises(ValueError):
-        Bomb(1, module_count=1, pool=["test_scope_only"], roles={"hands", "eyes", "book"})
+        Bomb(1, module_count=1, pool=["test_scope_only"], roles={"blind", "deaf", "mute"})
 
 
 def test_room_excludes_scope_only_module_when_scope_is_not_connected():
     room = Room("EEEE")
-    for role in ("hands", "eyes", "book"):
+    for role in ("blind", "deaf", "mute"):
         room.attach(role, _DummySocket())
     asyncio.run(room.start(modules=4, seed=1))
     assert all(m.id != "test_scope_only" for m in room.bomb.modules)

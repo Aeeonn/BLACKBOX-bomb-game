@@ -52,7 +52,7 @@ async def manual(code: str):
 async def ws_endpoint(sock: WebSocket):
     await sock.accept()
     code = (sock.query_params.get("room") or "").upper()
-    role = sock.query_params.get("role") or "hands"
+    role = sock.query_params.get("role") or "blind"
     room = ROOMS.get(code)
     if room is None:
         await sock.send_json({"type": "error", "text": "no such room: " + code})

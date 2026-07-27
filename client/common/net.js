@@ -1,7 +1,7 @@
 // Minimal websocket wrapper. No framework, no build step, on purpose.
 export const params = new URLSearchParams(location.search);
 export const ROOM = (params.get("room") || "").toUpperCase();
-export const ROLE = params.get("role") || "hands";
+export const ROLE = params.get("role") || "blind";
 
 let sock = null;
 const handlers = {};
@@ -35,8 +35,8 @@ export function fmtTime(s) {
   return m + ":" + String(r).padStart(2, "0");
 }
 
-// Hold-to-commit: gives BOOK one second to slam STOP. Do not remove.
-// onStart/onEnd are optional hooks so callers (hands.html) can report the
+// Hold-to-commit: gives MUTE one second to slam STOP. Do not remove.
+// onStart/onEnd are optional hooks so callers (blind.html) can report the
 // hold's start/stop to the server for the broadcast commit-charge ring
 // (AGENTS.md hard rule 12 / T10) without this generic UI helper needing to
 // know anything about networking. onEnd fires exactly once per hold attempt,

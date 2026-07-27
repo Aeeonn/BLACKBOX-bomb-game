@@ -1,9 +1,9 @@
 
 """M1 - Braid & Hue.
 
-HANDS feels texture + warmth (probe only).
-EYES sees colour + which wire feeds the LED.
-BOOK holds the texture x colour rule table and the generated footnotes.
+BLIND feels texture + warmth (probe only).
+DEAF sees colour + which wire feeds the LED.
+MUTE holds the texture x colour rule table and the generated footnotes.
 Three-key rule: satisfied. No two roles can solve this without the third.
 """
 import html
@@ -63,7 +63,7 @@ class BraidHue(Module):
         return plain + self._last_order()
 
     def act(self, role: str, action: dict) -> Result:
-        if role != "hands" or self.solved:
+        if role != "blind" or self.solved:
             return Result.NOTHING
 
         if "discharge" in action:
@@ -102,7 +102,7 @@ class BraidHue(Module):
         return Result.NOTHING
 
     def inspect(self, role: str, query: dict) -> dict:
-        if role != "hands" or "cell" not in query:
+        if role != "blind" or "cell" not in query:
             return {}
         i = int(query["cell"])
         if not (0 <= i < len(self.wires)):
@@ -119,14 +119,14 @@ class BraidHue(Module):
 
     def views(self) -> Views:
         return Views(
-            hands={"kind": "wires", "count": len(self.wires),
+            blind={"kind": "wires", "count": len(self.wires),
                    "cut": [w["cut"] for w in self.wires],
                    "discharged": [w["discharged"] for w in self.wires],
                    "solved": self.solved},
-            eyes={"kind": "wires",
+            deaf={"kind": "wires",
                   "wires": [{"colour": w["colour"], "cut": w["cut"]} for w in self.wires],
                   "led_wire": self.led_wire, "solved": self.solved},
-            book={"kind": "manual", "module": self.name, "solved": self.solved},
+            mute={"kind": "manual", "module": self.name, "solved": self.solved},
             scope={"kind": "netlist", "count": len(self.wires),
                    "nets": self.nets, "solved": self.solved},
         )

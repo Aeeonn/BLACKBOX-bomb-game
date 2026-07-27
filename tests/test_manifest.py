@@ -14,42 +14,42 @@ from server.modules.m04_manifest import LETTERS, SYMBOLS, Manifest
 POOL = ["m04"]
 
 
-def test_hands_view_never_carries_a_letter_or_step():
+def test_blind_view_never_carries_a_letter_or_step():
     for seed in range(200):
         m = Bomb(seed, module_count=1, pool=POOL).modules[0]
-        hv = m.views().hands
+        hv = m.views().blind
         assert set(hv.keys()) == {"kind", "count", "pressed", "solved"}, \
-            "seed %d: hands view has an unexpected key %r" % (seed, hv.keys())
+            "seed %d: blind view has an unexpected key %r" % (seed, hv.keys())
 
 
-def test_eyes_view_never_carries_a_symbol_or_step():
+def test_deaf_view_never_carries_a_symbol_or_step():
     for seed in range(200):
         m = Bomb(seed, module_count=1, pool=POOL).modules[0]
-        ev = m.views().eyes
+        ev = m.views().deaf
         assert set(ev.keys()) == {"kind", "stamps", "solved"}
         for stamp in ev["stamps"]:
             assert set(stamp.keys()) == {"letter", "pressed"}, \
-                "seed %d: eyes stamp has an unexpected key %r" % (seed, stamp.keys())
+                "seed %d: deaf stamp has an unexpected key %r" % (seed, stamp.keys())
             assert stamp["letter"] in LETTERS
 
 
-def test_book_gets_no_stamp_data():
+def test_mute_gets_no_stamp_data():
     for seed in range(200):
         m = Bomb(seed, module_count=1, pool=POOL).modules[0]
-        bv = m.views().book
+        bv = m.views().mute
         assert set(bv.keys()) <= {"kind", "module", "solved"}
 
 
-def test_only_hands_can_probe_manifest():
+def test_only_blind_can_probe_manifest():
     bomb = Bomb(1, module_count=1, pool=POOL)
-    assert bomb.inspect("eyes", 0, {"cell": 0}) == {}
-    assert bomb.inspect("book", 0, {"cell": 0}) == {}
+    assert bomb.inspect("deaf", 0, {"cell": 0}) == {}
+    assert bomb.inspect("mute", 0, {"cell": 0}) == {}
 
 
 def test_probe_reveals_symbol_as_text():
     bomb = Bomb(1, module_count=1, pool=POOL)
     m = bomb.modules[0]
-    data = bomb.inspect("hands", 0, {"cell": 0})
+    data = bomb.inspect("blind", 0, {"cell": 0})
     assert data["text"] == "feels like " + m.stamps[0]["symbol"]
 
 
@@ -57,7 +57,7 @@ def test_golden_path_solves_every_seed():
     for seed in range(300):
         m = Bomb(seed, module_count=1, pool=POOL).modules[0]
         for i in m.solution():
-            assert m.act("hands", {"press": i}) is not Result.STRIKE, \
+            assert m.act("blind", {"press": i}) is not Result.STRIKE, \
                 "seed %d: pressing in the table's own correct order struck" % seed
         assert m.solved, "seed %d: golden path did not solve" % seed
 
@@ -68,33 +68,33 @@ def test_pressing_out_of_order_strikes():
         order = m.solution()
         if len(order) < 2:
             continue
-        assert m.act("hands", {"press": order[1]}) is Result.STRIKE, \
+        assert m.act("blind", {"press": order[1]}) is Result.STRIKE, \
             "seed %d: pressing the second-in-order stamp first did not strike" % seed
         assert not m.stamps[order[1]]["pressed"], "a struck press must not mark the stamp pressed"
         # Recovering with the correct next press must still work afterwards.
-        assert m.act("hands", {"press": order[0]}) is not Result.STRIKE
+        assert m.act("blind", {"press": order[0]}) is not Result.STRIKE
 
 
 def test_pressing_an_already_pressed_stamp_is_a_no_op():
     m = Bomb(1, module_count=1, pool=POOL).modules[0]
     first = m.solution()[0]
-    m.act("hands", {"press": first})
-    assert m.act("hands", {"press": first}) is Result.NOTHING, \
+    m.act("blind", {"press": first})
+    assert m.act("blind", {"press": first}) is Result.NOTHING, \
         "acting on an already-pressed stamp again must be a no-op, not a second strike"
 
 
-def test_only_hands_may_act():
+def test_only_blind_may_act():
     m = Bomb(3, module_count=1, pool=POOL).modules[0]
-    for role in ("eyes", "book", "scope", "dispatch"):
+    for role in ("deaf", "mute", "scope", "dispatch"):
         assert m.act(role, {"press": 0}) is Result.NOTHING
 
 
 def test_acting_after_solved_is_a_no_op():
     m = Bomb(2, module_count=1, pool=POOL).modules[0]
     for i in m.solution():
-        m.act("hands", {"press": i})
+        m.act("blind", {"press": i})
     assert m.solved
-    assert m.act("hands", {"press": 0}) is Result.NOTHING
+    assert m.act("blind", {"press": 0}) is Result.NOTHING
 
 
 def test_temperature_warm_reverses_the_order():
@@ -132,7 +132,7 @@ def test_letters_are_always_distinct_within_a_round():
         m = Bomb(seed, module_count=1, pool=POOL).modules[0]
         letters = [s["letter"] for s in m.stamps]
         assert len(set(letters)) == len(letters), \
-            "seed %d: two stamps shared a letter, making them indistinguishable to EYES" % seed
+            "seed %d: two stamps shared a letter, making them indistinguishable to DEAF" % seed
 
 
 def test_stamp_count_is_between_four_and_six():
@@ -143,7 +143,7 @@ def test_stamp_count_is_between_four_and_six():
 
 def test_layout_is_a_tile_row_with_no_symbol_letter_or_step_data():
     bomb = Bomb(9, module_count=1, pool=POOL)
-    layout = bomb.snapshot("hands")["layouts"][0]
+    layout = bomb.snapshot("blind")["layouts"][0]
     m = bomb.modules[0]
     assert layout["h"] == 1 and layout["w"] == len(m.stamps)
     assert [s["idx"] for s in layout["slots"]] == list(range(len(m.stamps)))

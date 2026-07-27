@@ -1,16 +1,16 @@
 
 """M4 - The Manifest.
 
-HANDS feels each stamp and is told a private SYMBOL (probe only). EYES sees a
-public LETTER printed on that same stamp. BOOK's manual holds the full
+BLIND feels each stamp and is told a private SYMBOL (probe only). DEAF sees a
+public LETTER printed on that same stamp. MUTE's manual holds the full
 symbol x letter -> step-number grid. The whole set of stamps must be pressed
 in ascending step order (lowest first) - unlike M2's independent per-tile
 PRESS/SKIP, this is a full ordering across every stamp in play, closer in
 spirit to M1's CUT-before-LAST rule but generalised to the entire set rather
 than just a "last" subset.
 
-Three-key rule: satisfied. HANDS alone knows symbols but not letters or the
-table; EYES alone knows letters but not symbols or the table; BOOK alone
+Three-key rule: satisfied. BLIND alone knows symbols but not letters or the
+table; DEAF alone knows letters but not symbols or the table; MUTE alone
 knows the table but neither the symbols nor letters actually in play this
 round.
 """
@@ -33,7 +33,7 @@ class Manifest(Module):
         letters = rng.sample(LETTERS, n)
         self.table = {s: {l: rng.randint(1, n) for l in LETTERS} for s in SYMBOLS}
 
-        # Reuses the existing HANDS "temperature" flag rather than inventing
+        # Reuses the existing BLIND "temperature" flag rather than inventing
         # a new one - mirrors M1's casing-swap / M2's badge-swap / M3's
         # corner-screw-width twists.
         self.reverse = flags.get("temperature") == "warm"
@@ -73,7 +73,7 @@ class Manifest(Module):
         return self._order()
 
     def act(self, role: str, action: dict) -> Result:
-        if role != "hands" or self.solved:
+        if role != "blind" or self.solved:
             return Result.NOTHING
         if "press" not in action:
             return Result.NOTHING
@@ -92,7 +92,7 @@ class Manifest(Module):
         return Result.NOTHING
 
     def inspect(self, role: str, query: dict) -> dict:
-        if role != "hands" or "cell" not in query:
+        if role != "blind" or "cell" not in query:
             return {}
         i = int(query["cell"])
         if not (0 <= i < len(self.stamps)):
@@ -105,12 +105,12 @@ class Manifest(Module):
 
     def views(self) -> Views:
         return Views(
-            hands={"kind": "manifest", "count": len(self.stamps),
+            blind={"kind": "manifest", "count": len(self.stamps),
                    "pressed": [s["pressed"] for s in self.stamps], "solved": self.solved},
-            eyes={"kind": "manifest",
+            deaf={"kind": "manifest",
                   "stamps": [{"letter": s["letter"], "pressed": s["pressed"]} for s in self.stamps],
                   "solved": self.solved},
-            book={"kind": "manual", "module": self.name, "solved": self.solved},
+            mute={"kind": "manual", "module": self.name, "solved": self.solved},
             scope={"kind": "netlist", "count": len(self.stamps), "nets": [], "solved": self.solved},
         )
 
@@ -128,9 +128,9 @@ class Manifest(Module):
             cells = "".join("<td>%d</td>" % self.table[s][l] for l in LETTERS)
             rows += "<tr><th>%s</th>%s</tr>" % (s, cells)
         notes = [
-            "HANDS describes the symbol felt on each stamp out loud (e.g. \"this one feels like "
-            "an anchor\"). EYES reads off the printed letter on that same stamp.",
-            "Cross-reference HANDS' symbol (rows) against EYES' letter (columns) below to get "
+            "BLIND describes the symbol felt on each stamp out loud (e.g. \"this one feels like "
+            "an anchor\"). DEAF reads off the printed letter on that same stamp.",
+            "Cross-reference BLIND's symbol (rows) against DEAF's letter (columns) below to get "
             "that stamp's step number.",
             "Press every stamp in ascending step order, lowest number first. Pressing out of "
             "order is a strike and does not un-press anything already correctly stamped.",

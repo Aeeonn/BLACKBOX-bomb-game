@@ -13,38 +13,38 @@ from server.modules.m03_gauge import N_POSITIONS, Gauge
 POOL = ["m03"]
 
 
-def test_hands_view_never_carries_position_or_zone_data():
+def test_blind_view_never_carries_position_or_zone_data():
     for seed in range(200):
         m = Bomb(seed, module_count=1, pool=POOL).modules[0]
-        hv = m.views().hands
+        hv = m.views().blind
         assert set(hv.keys()) == {"kind", "solved"}, \
-            "seed %d: hands view has an unexpected key %r" % (seed, hv.keys())
+            "seed %d: blind view has an unexpected key %r" % (seed, hv.keys())
 
 
-def test_eyes_view_has_position_but_never_the_zone():
+def test_deaf_view_has_position_but_never_the_zone():
     for seed in range(200):
         m = Bomb(seed, module_count=1, pool=POOL).modules[0]
-        ev = m.views().eyes
+        ev = m.views().deaf
         assert set(ev.keys()) == {"kind", "position", "count", "solved"}
         assert 0 <= ev["position"] < N_POSITIONS
 
 
-def test_book_gets_no_position_data():
+def test_mute_gets_no_position_data():
     for seed in range(200):
         m = Bomb(seed, module_count=1, pool=POOL).modules[0]
-        bv = m.views().book
+        bv = m.views().mute
         assert set(bv.keys()) <= {"kind", "module", "solved"}
 
 
-def test_only_hands_can_probe_gauge():
+def test_only_blind_can_probe_gauge():
     bomb = Bomb(1, module_count=1, pool=POOL)
-    assert bomb.inspect("eyes", 0, {"cell": 0}) == {}
-    assert bomb.inspect("book", 0, {"cell": 0}) == {}
+    assert bomb.inspect("deaf", 0, {"cell": 0}) == {}
+    assert bomb.inspect("mute", 0, {"cell": 0}) == {}
 
 
-def test_only_hands_may_act():
+def test_only_blind_may_act():
     m = Bomb(3, module_count=1, pool=POOL).modules[0]
-    for role in ("eyes", "book", "scope", "dispatch"):
+    for role in ("deaf", "mute", "scope", "dispatch"):
         assert m.act(role, {"turn": "cw"}) is Result.NOTHING
         assert m.act(role, {"lock": 0}) is Result.NOTHING
 
@@ -53,7 +53,7 @@ def test_turning_cw_wraps_from_the_top_to_zero():
     m = Gauge()
     m.generate(random.Random(1), {})
     m.position = N_POSITIONS - 1
-    m.act("hands", {"turn": "cw"})
+    m.act("blind", {"turn": "cw"})
     assert m.position == 0
 
 
@@ -61,7 +61,7 @@ def test_turning_ccw_wraps_from_zero_to_the_top():
     m = Gauge()
     m.generate(random.Random(2), {})
     m.position = 0
-    m.act("hands", {"turn": "ccw"})
+    m.act("blind", {"turn": "ccw"})
     assert m.position == N_POSITIONS - 1
 
 
@@ -69,7 +69,7 @@ def test_turning_never_strikes_regardless_of_position():
     m = Gauge()
     m.generate(random.Random(3), {})
     for _ in range(N_POSITIONS * 3):
-        assert m.act("hands", {"turn": "cw"}) is Result.NOTHING
+        assert m.act("blind", {"turn": "cw"}) is Result.NOTHING
 
 
 def test_full_lap_returns_to_the_start():
@@ -77,7 +77,7 @@ def test_full_lap_returns_to_the_start():
     m.generate(random.Random(4), {})
     start = m.position
     for _ in range(N_POSITIONS):
-        m.act("hands", {"turn": "cw"})
+        m.act("blind", {"turn": "cw"})
     assert m.position == start
 
 
@@ -86,7 +86,7 @@ def test_lock_inside_zone_solves():
         m = Gauge()
         m.generate(random.Random(seed), {})
         m.position = m.zone[0]
-        assert m.act("hands", {"lock": 0}) is Result.SOLVED, "seed %d" % seed
+        assert m.act("blind", {"lock": 0}) is Result.SOLVED, "seed %d" % seed
         assert m.solved
 
 
@@ -96,12 +96,12 @@ def test_lock_outside_zone_strikes_but_stays_open():
         m.generate(random.Random(seed), {})
         outside = next(p for p in range(N_POSITIONS) if p not in m.zone)
         m.position = outside
-        assert m.act("hands", {"lock": 0}) is Result.STRIKE, "seed %d" % seed
+        assert m.act("blind", {"lock": 0}) is Result.STRIKE, "seed %d" % seed
         assert not m.solved
         assert m.position == outside, "a wrong lock must not move the needle"
         # Retrying correctly afterwards must still work.
         m.position = m.zone[0]
-        assert m.act("hands", {"lock": 0}) is Result.SOLVED
+        assert m.act("blind", {"lock": 0}) is Result.SOLVED
 
 
 def test_lock_value_of_zero_is_not_treated_as_falsy():
@@ -112,17 +112,17 @@ def test_lock_value_of_zero_is_not_treated_as_falsy():
     m = Gauge()
     m.generate(random.Random(5), {})
     m.position = m.zone[0]
-    assert m.act("hands", {"lock": 0}) is Result.SOLVED
+    assert m.act("blind", {"lock": 0}) is Result.SOLVED
 
 
 def test_acting_after_solved_is_a_no_op():
     m = Gauge()
     m.generate(random.Random(6), {})
     m.position = m.zone[0]
-    m.act("hands", {"lock": 0})
+    m.act("blind", {"lock": 0})
     assert m.solved
-    assert m.act("hands", {"turn": "cw"}) is Result.NOTHING
-    assert m.act("hands", {"lock": 0}) is Result.NOTHING
+    assert m.act("blind", {"turn": "cw"}) is Result.NOTHING
+    assert m.act("blind", {"lock": 0}) is Result.NOTHING
 
 
 def test_starting_position_is_never_already_inside_the_zone():
@@ -140,7 +140,7 @@ def test_deep_notch_feels_different_only_at_its_own_position():
         m.generate(random.Random(seed), {})
         for p in range(N_POSITIONS):
             m.position = p
-            data = m.inspect("hands", {"cell": 0})
+            data = m.inspect("blind", {"cell": 0})
             expected = "deep click" if p == m.deep_notch else "click"
             assert data["text"] == expected, "seed %d position %d" % (seed, p)
 
@@ -165,7 +165,7 @@ def test_zone_is_contiguous_and_wraps_correctly():
 
 def test_layout_is_one_dial_slot_with_no_position_or_zone_data():
     bomb = Bomb(7, module_count=1, pool=POOL)
-    layout = bomb.snapshot("hands")["layouts"][0]
+    layout = bomb.snapshot("blind")["layouts"][0]
     assert layout["w"] == 1 and layout["h"] == 1
     assert len(layout["slots"]) == 1
     assert layout["slots"][0]["kind"] == "dial"

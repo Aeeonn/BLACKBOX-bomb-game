@@ -49,7 +49,7 @@ on("state", m => {
   draw();
   updateOverlay(state.phase, undefined, state.paused, pauseText(presence));
   // updateFeedback's audio half is a no-op for DEAF (see feedback.js's own
-  // ALLOWED gate, same hands/book-only rule as the timer tick) - the flash
+  // ALLOWED gate, same blind/mute-only rule as the timer tick) - the flash
   // half is NOT gated, since strikes/solved-count are already broadcast to
   // every role and a visual cue reacting to them leaks nothing new.
   updateFeedback(state.strikes, state.modules.filter(mv => mv.solved).length, state.phase);
@@ -73,28 +73,28 @@ function draw() {
     "serial " + s.flags.serial + " / badge " + s.flags.badge + " / " + s.flags.leds + " LEDs lit / sticker " + s.flags.sticker;
   const v = s.modules[mod] || { kind: "wires", wires: [] };
   const layout = (s.layouts && s.layouts[mod]) || { slots: [] };
-  const hp = findPlayer(presence, "hands");
+  const hp = findPlayer(presence, "blind");
   const probe = hp && hp.probe;
   const charge = hp && hp.charge;
-  // T12: BOOK's pointer is module-level only. EYES only shows one module at
+  // T12: MUTE's pointer is module-level only. DEAF only shows one module at
   // a time (TAB to switch), so a per-slot highlight doesn't apply here the
-  // way it does on BOOK/SCOPE's all-modules-at-once shells - a text hint
+  // way it does on MUTE/SCOPE's all-modules-at-once shells - a text hint
   // plus a border on the grid once you've tabbed to the right module does
   // the same job.
-  const bp = findPlayer(presence, "book");
+  const bp = findPlayer(presence, "mute");
   const pointedModule = bp && bp.pointer ? bp.pointer.module : null;
   const hint = document.getElementById("pointerhint");
-  hint.textContent = pointedModule == null ? "" : DISPLAY_NAME.book + " is pointing at module " + (pointedModule + 1);
+  hint.textContent = pointedModule == null ? "" : DISPLAY_NAME.mute + " is pointing at module " + (pointedModule + 1);
   hint.className = "pointer-hint" + (pointedModule != null ? " active" : "");
   const grid = document.getElementById("grid");
   grid.classList.toggle("pointed", pointedModule === mod);
-  // T14/T15: EYES' own look now depends on which module this is - M1's wires
+  // T14/T15: DEAF's own look now depends on which module this is - M1's wires
   // show a colour + LED marker; M2's Ledger tiles show a plain printed
   // number; N1's Vent shows which of the three vents is currently glowing
   // (a live signal, not a per-slot "resolved" state - a needy module's vent
   // un-glows and can re-glow again later, so there's no "cut" look for it).
   // All three still get the same probed/charging highlight, since those
-  // come from HANDS' presence data, not from the module itself.
+  // come from BLIND's presence data, not from the module itself.
   renderBombFace(grid, layout, (el, slot, i) => {
     const isProbed = probe && probe.module === mod && probe.cell === i;
     const isCharging = charge && charge.module === mod && charge.cell === i;
@@ -110,14 +110,14 @@ function draw() {
       el.innerHTML = "<div>[" + (i + 1) + "]" + (glowing ? "<br><small>GLOWING</small>" : "") + "</div>";
     } else if (v.kind === "gauge") {
       // T16: one slot only (the dial itself) - shows the needle's current
-      // 1-12 number. EYES never sees the target zone, only where the
+      // 1-12 number. DEAF never sees the target zone, only where the
       // needle currently sits; the zone lives solely in MUTE's manual.
       el.className = "slot" + (isProbed ? " probed" : "") + (isCharging ? " charging" : "");
       el.style.borderColor = "#333";
       el.innerHTML = "<div>Needle at<br><b style=\"font-size:28px\">" + (v.position + 1) +
         "</b><br><small>of " + v.count + "</small></div>";
     } else if (v.kind === "manifest") {
-      // M4: EYES only ever sees the printed letter, never HANDS' felt
+      // M4: DEAF only ever sees the printed letter, never BLIND's felt
       // symbol or the step it maps to - same "one axis each" split as
       // ledger's number, just a letter instead.
       const t = (v.stamps && v.stamps[i]) || {};
@@ -125,17 +125,17 @@ function draw() {
       el.style.borderColor = "#333";
       el.innerHTML = "<div>[" + (i + 1) + "]<br><b style=\"font-size:22px\">" + (t.letter || "") + "</b></div>";
     } else if (v.kind === "static") {
-      // M5: EYES only ever sees the tile's colour, never HANDS' felt
-      // buzz/quiet state or the buzzing tally it adds up to - EYES has no
+      // M5: DEAF only ever sees the tile's colour, never BLIND's felt
+      // buzz/quiet state or the buzzing tally it adds up to - DEAF has no
       // way to know which colour is currently correct without hearing that
-      // tally from HANDS and the rule from BOOK.
+      // tally from BLIND and the rule from MUTE.
       const t = (v.tiles && v.tiles[i]) || {};
       el.className = "slot" + (t.pressed ? " cut" : "") + (isProbed ? " probed" : "") + (isCharging ? " charging" : "");
       el.style.borderColor = SWATCH[t.colour] || "#333";
       el.innerHTML = "<div>[" + (i + 1) + "]<br>" + (t.colour || "") + "</div>";
     } else if (v.kind === "handshake") {
-      // N2: EYES sees the sync window live (this module's only broadcast
-      // field) - never HANDS' probe-only "syncing/idle" read, and never the
+      // N2: DEAF sees the sync window live (this module's only broadcast
+      // field) - never BLIND's probe-only "syncing/idle" read, and never the
       // sticker-based rule, which lives solely in MUTE's manual.
       el.className = "slot" + (v.open ? " glowing" : "") + (isProbed ? " probed" : "") + (isCharging ? " charging" : "");
       el.style.borderColor = v.open ? "#c8402f" : "#333";

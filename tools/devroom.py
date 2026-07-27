@@ -6,7 +6,7 @@ import urllib.request
 import webbrowser
 
 HOST = sys.argv[1] if len(sys.argv) > 1 else "http://localhost:8000"
-ROLES = ["hands", "eyes", "book", "scope"]
+ROLES = ["blind", "deaf", "mute", "scope"]
 
 req = urllib.request.Request(HOST + "/api/room", method="POST")
 code = json.load(urllib.request.urlopen(req))["room"]

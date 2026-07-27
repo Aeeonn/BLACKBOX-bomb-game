@@ -1,13 +1,13 @@
 
 """M2 - The Ledger.
 
-HANDS feels each tile and is told a plain number (probe only) - never
-shown it directly. EYES sees a different, independently-generated number
-printed on each tile. BOOK's manual holds the (hands number, eyes number)
+BLIND feels each tile and is told a plain number (probe only) - never
+shown it directly. DEAF sees a different, independently-generated number
+printed on each tile. MUTE's manual holds the (blind number, deaf number)
 -> PRESS/SKIP lookup table.
 
-Three-key rule: satisfied. HANDS alone knows its own numbers but not the
-verdict; EYES alone knows its own numbers but not the verdict; BOOK alone
+Three-key rule: satisfied. BLIND alone knows its own numbers but not the
+verdict; DEAF alone knows its own numbers but not the verdict; MUTE alone
 knows the table but neither set of numbers.
 
 The "braille" flavour is purely decorative dot art drawn client-side from
@@ -33,13 +33,13 @@ class Ledger(Module):
     def generate(self, rng: random.Random, flags: dict) -> None:
         n = 6
         self.tiles = [
-            {"hands_value": rng.choice(VALUES), "eyes_value": rng.choice(VALUES),
+            {"blind_value": rng.choice(VALUES), "deaf_value": rng.choice(VALUES),
              "resolved": False}
             for _ in range(n)
         ]
         self.table = {hv: {ev: rng.choice(VERDICTS) for ev in VALUES} for hv in VALUES}
 
-        # Reuses the existing EYES "badge" flag - no new global flag needed.
+        # Reuses the existing DEAF "badge" flag - no new global flag needed.
         # Mirrors M1's greasy-casing swap.
         self.swap = flags.get("badge") == "red"
 
@@ -63,13 +63,13 @@ class Ledger(Module):
             flipped = "SKIP" if only == "PRESS" else "PRESS"
             raw_value = only if self.swap else flipped
             t = self.tiles[0]
-            self.table[t["hands_value"]][t["eyes_value"]] = raw_value
+            self.table[t["blind_value"]][t["deaf_value"]] = raw_value
 
         self.solved = False
 
     def _verdict(self, i: int) -> str:
         t = self.tiles[i]
-        v = self.table[t["hands_value"]][t["eyes_value"]]
+        v = self.table[t["blind_value"]][t["deaf_value"]]
         if self.swap:
             v = {"PRESS": "SKIP", "SKIP": "PRESS"}[v]
         return v
@@ -79,7 +79,7 @@ class Ledger(Module):
         return {i: self._verdict(i) for i in range(len(self.tiles))}
 
     def act(self, role: str, action: dict) -> Result:
-        if role != "hands" or self.solved:
+        if role != "blind" or self.solved:
             return Result.NOTHING
 
         if "press" in action:
@@ -102,26 +102,26 @@ class Ledger(Module):
         return Result.NOTHING
 
     def inspect(self, role: str, query: dict) -> dict:
-        if role != "hands" or "cell" not in query:
+        if role != "blind" or "cell" not in query:
             return {}
         i = int(query["cell"])
         if not (0 <= i < len(self.tiles)):
             return {}
         t = self.tiles[i]
-        bits = ["reads %d" % t["hands_value"]]
+        bits = ["reads %d" % t["blind_value"]]
         if t["resolved"]:
             bits.append("done")
         return {"cell": i, "text": ", ".join(bits)}
 
     def views(self) -> Views:
         return Views(
-            hands={"kind": "ledger", "count": len(self.tiles),
+            blind={"kind": "ledger", "count": len(self.tiles),
                    "resolved": [t["resolved"] for t in self.tiles],
                    "solved": self.solved},
-            eyes={"kind": "ledger",
-                  "tiles": [{"value": t["eyes_value"], "resolved": t["resolved"]} for t in self.tiles],
+            deaf={"kind": "ledger",
+                  "tiles": [{"value": t["deaf_value"], "resolved": t["resolved"]} for t in self.tiles],
                   "solved": self.solved},
-            book={"kind": "manual", "module": self.name, "solved": self.solved},
+            mute={"kind": "manual", "module": self.name, "solved": self.solved},
             scope={"kind": "netlist", "count": len(self.tiles), "nets": [], "solved": self.solved},
         )
 
@@ -142,14 +142,14 @@ class Ledger(Module):
                             for ev in VALUES)
             rows += "<tr><th>%d</th>%s</tr>" % (hv, cells)
         notes = [
-            "HANDS reads the number they feel on a tile aloud; EYES reads the number printed on "
-            "that same tile aloud. Cross-reference HANDS' number (rows) against EYES' number "
+            "BLIND reads the number they feel on a tile aloud; DEAF reads the number printed on "
+            "that same tile aloud. Cross-reference BLIND's number (rows) against DEAF's number "
             "(columns) below.",
             "If the badge is <b>red</b>, swap every PRESS and SKIP entry.",
             "Every tile must be explicitly pressed or skipped - guessing wrong is a strike.",
         ]
         return ('<section class="module"><h2>%s</h2>'
-                '<table class="rules"><tr><th>HANDS \\ EYES</th>%s</tr>%s</table>'
+                '<table class="rules"><tr><th>BLIND \\ DEAF</th>%s</tr>%s</table>'
                 '<ol class="notes">%s</ol></section>'
                 % (html.escape(self.name), head, rows,
                    "".join("<li>%s</li>" % note for note in notes)))

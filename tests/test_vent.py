@@ -23,7 +23,7 @@ def test_needy_only_bomb_can_never_be_won():
         for m in bomb.modules:
             while m.active is None:
                 m.tick(1.0)
-            m.act("hands", {"purge": m.table[m.active]})
+            m.act("blind", {"purge": m.table[m.active]})
         bomb._settle(Result.NOTHING)
     assert bomb.phase == "running", \
         "an all-needy bomb reached %r - it must never be winnable" % bomb.phase
@@ -54,8 +54,8 @@ def test_needy_module_does_not_block_a_win_once_the_real_objective_is_solved():
 
     for i in m01.solution():
         if m01.wires[i]["warm"]:
-            bomb.act("hands", bomb.modules.index(m01), {"discharge": i})
-        bomb.act("hands", bomb.modules.index(m01), {"cut": i})
+            bomb.act("blind", bomb.modules.index(m01), {"discharge": i})
+        bomb.act("blind", bomb.modules.index(m01), {"cut": i})
 
     assert bomb.phase == "won", \
         "the round should be won once the only non-needy module solves, regardless of the neglected Vent"
@@ -98,7 +98,7 @@ def test_correct_purge_resets_without_a_strike():
     m.cooldown = 0
     m.tick(0.01)
     target = m.table[m.active]
-    assert m.act("hands", {"purge": target}) is not Result.STRIKE
+    assert m.act("blind", {"purge": target}) is not Result.STRIKE
     assert m.active is None, "a correct purge must cool the vent down"
 
 
@@ -109,10 +109,10 @@ def test_wrong_purge_strikes_but_stays_active_for_a_retry():
     m.tick(0.01)
     target = m.table[m.active]
     wrong = next(i for i in range(N_VENTS) if i != target)
-    assert m.act("hands", {"purge": wrong}) is Result.STRIKE
+    assert m.act("blind", {"purge": wrong}) is Result.STRIKE
     assert m.active is not None, "a wrong purge must NOT reset - the crew should get to retry within the window"
     # Retrying with the correct vent afterwards must still work.
-    assert m.act("hands", {"purge": target}) is not Result.STRIKE
+    assert m.act("blind", {"purge": target}) is not Result.STRIKE
     assert m.active is None
 
 
@@ -120,23 +120,23 @@ def test_purge_while_dormant_is_a_no_op():
     m = Vent()
     m.generate(random.Random(5), {})
     assert m.active is None
-    assert m.act("hands", {"purge": 0}) is Result.NOTHING
+    assert m.act("blind", {"purge": 0}) is Result.NOTHING
 
 
-def test_only_hands_may_purge():
+def test_only_blind_may_purge():
     m = Vent()
     m.generate(random.Random(6), {})
     m.cooldown = 0
     m.tick(0.01)
     target = m.table[m.active]
-    for role in ("eyes", "book", "scope", "dispatch"):
+    for role in ("deaf", "mute", "scope", "dispatch"):
         assert m.act(role, {"purge": target}) is Result.NOTHING
 
 
-def test_only_hands_can_probe_vent():
+def test_only_blind_can_probe_vent():
     bomb = Bomb(1, module_count=1, pool=POOL)
-    assert bomb.inspect("eyes", 0, {"cell": 0}) == {}
-    assert bomb.inspect("book", 0, {"cell": 0}) == {}
+    assert bomb.inspect("deaf", 0, {"cell": 0}) == {}
+    assert bomb.inspect("mute", 0, {"cell": 0}) == {}
 
 
 def test_probe_reports_warm_only_for_the_active_vent():
@@ -145,14 +145,14 @@ def test_probe_reports_warm_only_for_the_active_vent():
     m.cooldown = 0
     m.tick(0.01)
     for i in range(N_VENTS):
-        data = m.inspect("hands", {"cell": i})
+        data = m.inspect("blind", {"cell": i})
         expected = "warm" if i == m.active else "cool"
         assert data["text"] == expected
 
 
 def test_table_is_not_always_the_identity_mapping_across_many_seeds():
     # Confirms the indirection genuinely exists - if every seed happened to
-    # map every glow to itself, BOOK's table would be pointless and the
+    # map every glow to itself, MUTE's table would be pointless and the
     # module would collapse to "just purge whichever one glows."
     any_non_identity = False
     for seed in range(50):
@@ -164,33 +164,33 @@ def test_table_is_not_always_the_identity_mapping_across_many_seeds():
     assert any_non_identity, "expected at least one seed with a non-identity glow->purge mapping"
 
 
-def test_hands_view_never_carries_glow_or_table_data():
+def test_blind_view_never_carries_glow_or_table_data():
     for seed in range(100):
         m = Vent()
         m.generate(random.Random(seed), {})
-        hv = m.views().hands
+        hv = m.views().blind
         assert set(hv.keys()) == {"kind", "count", "solved"}
 
 
-def test_eyes_view_never_carries_the_purge_table():
+def test_deaf_view_never_carries_the_purge_table():
     for seed in range(100):
         m = Vent()
         m.generate(random.Random(seed), {})
-        ev = m.views().eyes
+        ev = m.views().deaf
         assert set(ev.keys()) == {"kind", "count", "glowing", "solved"}
 
 
-def test_book_gets_no_per_vent_state():
+def test_mute_gets_no_per_vent_state():
     for seed in range(100):
         m = Vent()
         m.generate(random.Random(seed), {})
-        bv = m.views().book
+        bv = m.views().mute
         assert set(bv.keys()) <= {"kind", "module", "solved"}
 
 
 def test_layout_is_three_vents_with_no_glow_or_table_data():
     bomb = Bomb(1, module_count=1, pool=POOL)
-    layout = bomb.snapshot("hands")["layouts"][0]
+    layout = bomb.snapshot("blind")["layouts"][0]
     assert layout["w"] == N_VENTS and layout["h"] == 1
     assert [s["idx"] for s in layout["slots"]] == list(range(N_VENTS))
     assert all(s["kind"] == "vent" for s in layout["slots"])
@@ -209,7 +209,7 @@ def test_golden_path_survives_many_cycles_with_zero_strikes():
                 r = m.tick(1.0)
                 if r is Result.STRIKE:
                     strikes += 1
-            r = m.act("hands", {"purge": m.table[m.active]})
+            r = m.act("blind", {"purge": m.table[m.active]})
             if r is Result.STRIKE:
                 strikes += 1
         assert strikes == 0, "seed %d: tending every cycle correctly still struck" % seed

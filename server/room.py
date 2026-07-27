@@ -8,8 +8,8 @@ from .bomb import Bomb
 from .modules.base import Result
 from .stage import Stage
 
-ROLES = ["hands", "eyes", "book", "scope", "dispatch"]
-REQUIRED_ROLES = {"hands", "eyes", "book"}
+ROLES = ["blind", "deaf", "mute", "scope", "dispatch"]
+REQUIRED_ROLES = {"blind", "deaf", "mute"}
 CARDS = ["STOP", "GO", "YES", "NO", "WAIT", "AGAIN", "1", "2", "3", "4", "LEFT", "RIGHT"]
 FLASH_COOLDOWN = 2.0
 
@@ -143,16 +143,16 @@ class Room:
                          module_count=modules, seconds=seconds,
                          roles=set(self.sockets.keys()), mirror=mirror)
         # T18: Mirror forces probe_echo off, overriding even an explicit
-        # request - watching HANDS' probe-echo ring at its shared-layout
-        # position while EYES describes a different position entirely would
+        # request - watching BLIND's probe-echo ring at its shared-layout
+        # position while DEAF describes a different position entirely would
         # reveal the flip instantly (see AGENTS.md T18).
         self.stage.probe_echo = False if mirror else probe_echo
         self.stage.precise_pointing = precise_pointing
         # A stale probe/charge/pointer from the previous round could
         # momentarily point at a slot that doesn't exist in the new bomb's
         # modules.
-        self.stage.avatars["hands"].probe = None
-        self.stage.avatars["hands"].charge = None
+        self.stage.avatars["blind"].probe = None
+        self.stage.avatars["blind"].charge = None
         for a in self.stage.avatars.values():
             a.pointer = None
         await self.log("Bomb armed. Seed %d." % self.bomb.seed)
@@ -212,13 +212,13 @@ class Room:
             data = self.bomb.inspect(role, idx, {"cell": cell})
             await self.send(role, {"type": "probe_result", "module": idx, "data": data})
 
-        elif kind == "flash" and role == "book":
+        elif kind == "flash" and role == "mute":
             now = time.monotonic()
             card = msg.get("card")
             if card in CARDS and now - self.last_flash >= FLASH_COOLDOWN:
                 self.last_flash = now
-                await self.send("eyes", {"type": "flash", "card": card})
-                await self.send("book", {"type": "flash_ok", "card": card})
+                await self.send("deaf", {"type": "flash", "card": card})
+                await self.send("mute", {"type": "flash_ok", "card": card})
 
         elif kind == "pose":
             self.stage.apply_pose(role, msg.get("yaw", 0.0), msg.get("pitch", 0.0),
@@ -235,7 +235,7 @@ class Room:
         elif kind == "charge":
             # Presence-layer, like pose/gesture/point above - not gated on
             # self.bomb, since Stage never needs to know whether a bomb
-            # exists to track where HANDS' hold currently is.
+            # exists to track where BLIND's hold currently is.
             if msg.get("action") == "start":
                 self.stage.start_charge(role, msg.get("kind", ""),
                                         int(msg.get("module", 0)), int(msg.get("cell", 0)))

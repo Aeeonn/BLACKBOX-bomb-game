@@ -5,15 +5,15 @@ The first needy module: it never "solves" (Module.needy=True excludes it
 from Bomb._settle()'s win check - see T15's session notes) - it just has to
 be tended for the whole round, generating a strike if neglected.
 
-Every ~45s one of three vents starts glowing. EYES sees exactly which one,
-directly - no probing needed. HANDS feels the SAME vent as "warm" via probe,
+Every ~45s one of three vents starts glowing. DEAF sees exactly which one,
+directly - no probing needed. BLIND feels the SAME vent as "warm" via probe,
 which is a deliberately redundant confirmation channel, not the hidden part.
-The hidden part is BOOK's manual: a per-round-random table mapping the
+The hidden part is MUTE's manual: a per-round-random table mapping the
 glowing vent's number to the vent that must ACTUALLY be purged. Purging the
 glowing vent itself is only correct if the table happens to map it to
-itself - most rounds it won't. Three-key rule: satisfied. HANDS alone knows
-which vent is warm but not which to purge; EYES alone knows which glows but
-not the table; BOOK alone knows the table but not which vent is currently
+itself - most rounds it won't. Three-key rule: satisfied. BLIND alone knows
+which vent is warm but not which to purge; DEAF alone knows which glows but
+not the table; MUTE alone knows the table but not which vent is currently
 glowing.
 """
 import html
@@ -69,7 +69,7 @@ class Vent(Module):
         return Result.NOTHING
 
     def act(self, role: str, action: dict) -> Result:
-        if role != "hands" or "purge" not in action or self.active is None:
+        if role != "blind" or "purge" not in action or self.active is None:
             return Result.NOTHING
         i = int(action["purge"])
         if not (0 <= i < N_VENTS):
@@ -86,7 +86,7 @@ class Vent(Module):
         return Result.NOTHING
 
     def inspect(self, role: str, query: dict) -> dict:
-        if role != "hands" or "cell" not in query:
+        if role != "blind" or "cell" not in query:
             return {}
         i = int(query["cell"])
         if not (0 <= i < N_VENTS):
@@ -95,9 +95,9 @@ class Vent(Module):
 
     def views(self) -> Views:
         return Views(
-            hands={"kind": "vent", "count": N_VENTS, "solved": self.solved},
-            eyes={"kind": "vent", "count": N_VENTS, "glowing": self.active, "solved": self.solved},
-            book={"kind": "manual", "module": self.name, "solved": self.solved},
+            blind={"kind": "vent", "count": N_VENTS, "solved": self.solved},
+            deaf={"kind": "vent", "count": N_VENTS, "glowing": self.active, "solved": self.solved},
+            mute={"kind": "manual", "module": self.name, "solved": self.solved},
             scope={"kind": "netlist", "count": N_VENTS, "nets": [], "solved": self.solved},
         )
 
@@ -112,10 +112,10 @@ class Vent(Module):
         )
         notes = [
             "This module never finishes - it must be tended for the whole round.",
-            "Roughly every 45 seconds, one of the three vents starts glowing. EYES calls out its number.",
-            "Look up the glowing number below to find which vent HANDS must actually purge - "
+            "Roughly every 45 seconds, one of the three vents starts glowing. DEAF calls out its number.",
+            "Look up the glowing number below to find which vent BLIND must actually purge - "
             "they are often <b>not</b> the same vent.",
-            "HANDS has 15 seconds to purge the correct vent once one starts glowing. "
+            "BLIND has 15 seconds to purge the correct vent once one starts glowing. "
             "Purging the wrong vent, or running out of time, is a strike.",
         ]
         return ('<section class="module"><h2>%s</h2>'

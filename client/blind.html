@@ -73,7 +73,7 @@ function probe() { send({ type: "probe", module: mod, cell: cell }); }
 // T14: every module BLIND can act on shows hold-buttons here, but WHAT
 // those buttons do depends on the module - M1's wires want CUT/DISCHARGE,
 // M2's Ledger tiles want PRESS/SKIP. This table is the one place that maps
-// a module's "kind" (from its own views().hands) to the buttons/keys/labels
+// a module's "kind" (from its own views().blind) to the buttons/keys/labels
 // for it, so adding a future module's action pair never means hardcoding a
 // third pair of buttons in the page - just one more entry here.
 //

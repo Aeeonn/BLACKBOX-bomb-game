@@ -13,7 +13,7 @@ function ensure() {
 
 // Call this from your existing "state" handler with the bomb's phase. Pass
 // onRearm (a function) only on the page that should offer a REARM button -
-// today that's BOOK. Every other page omits it and gets no button.
+// today that's MUTE. Every other page omits it and gets no button.
 //
 // Polish pass: paused/pauseLabel are optional extra args - pass the round's
 // "paused" flag and roster.js's pauseText(presence) to also show a full,

@@ -58,8 +58,8 @@ button:hover { background: #2c2c2c; }
    outline, so it reads as "urgent" at a glance the way a probed/charging
    outline alone wouldn't. */
 .bombface .slot.glowing { background: rgba(200,64,47,.35); border-color: var(--hot); }
-/* T12: BOOK's pointer is module-level only, so it highlights the whole
-   module box rather than one slot - #a678b0 matches BOOK's avatar colour on
+/* T12: MUTE's pointer is module-level only, so it highlights the whole
+   module box rather than one slot - #a678b0 matches MUTE's avatar colour on
    the shared stage, so the tie between "the purple bust" and "the purple
    outline" is visible without reading a label. */
 .bombface-wrap.pointable { cursor: pointer; }
