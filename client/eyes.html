@@ -69,10 +69,13 @@ function draw() {
   hint.className = "pointer-hint" + (pointedModule != null ? " active" : "");
   const grid = document.getElementById("grid");
   grid.classList.toggle("pointed", pointedModule === mod);
-  // T14: EYES' own look now depends on which module this is - M1's wires
+  // T14/T15: EYES' own look now depends on which module this is - M1's wires
   // show a colour + LED marker; M2's Ledger tiles show a plain printed
-  // number instead. Both still get the same probed/charging highlight,
-  // since those come from HANDS' presence data, not from the module itself.
+  // number; N1's Vent shows which of the three vents is currently glowing
+  // (a live signal, not a per-slot "resolved" state - a needy module's vent
+  // un-glows and can re-glow again later, so there's no "cut" look for it).
+  // All three still get the same probed/charging highlight, since those
+  // come from HANDS' presence data, not from the module itself.
   renderBombFace(grid, layout, (el, slot, i) => {
     const isProbed = probe && probe.module === mod && probe.cell === i;
     const isCharging = charge && charge.module === mod && charge.cell === i;
@@ -81,6 +84,11 @@ function draw() {
       el.className = "slot" + (t.resolved ? " cut" : "") + (isProbed ? " probed" : "") + (isCharging ? " charging" : "");
       el.style.borderColor = "#333";
       el.innerHTML = "<div>[" + (i + 1) + "]<br><b style=\"font-size:20px\">" + (t.value != null ? t.value : "") + "</b></div>";
+    } else if (v.kind === "vent") {
+      const glowing = v.glowing === i;
+      el.className = "slot" + (glowing ? " glowing" : "") + (isProbed ? " probed" : "") + (isCharging ? " charging" : "");
+      el.style.borderColor = glowing ? "#c8402f" : "#333";
+      el.innerHTML = "<div>[" + (i + 1) + "]" + (glowing ? "<br><small>GLOWING</small>" : "") + "</div>";
     } else {
       const w = v.wires[i] || {};
       el.className = "slot" + (w.cut ? " cut" : "") + (isProbed ? " probed" : "") + (isCharging ? " charging" : "");

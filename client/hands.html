@@ -45,19 +45,23 @@ on("probe_result", m => {
 
 function probe() { send({ type: "probe", module: mod, cell: cell }); }
 
-// T14: every module BLIND can act on shows two hold-buttons here, but WHAT
+// T14: every module BLIND can act on shows hold-buttons here, but WHAT
 // those buttons do depends on the module - M1's wires want CUT/DISCHARGE,
 // M2's Ledger tiles want PRESS/SKIP. This table is the one place that maps
 // a module's "kind" (from its own views().hands) to the buttons/keys/labels
 // for it, so adding a future module's action pair never means hardcoding a
 // third pair of buttons in the page - just one more entry here.
 //
-// chargeKind reuses "cut" (already a 1-second hold on the server) for both
-// of Ledger's actions rather than asking server/stage.py to learn two new
-// hold-kind names - both really are 1-second holds, so nothing about the
-// broadcast ring's timing is actually wrong, it just means the ring's
-// internal "kind" label says "cut" even when you're really pressing or
-// skipping a tile. Nothing ever displays that label as text, only its
+// T15: N1 Vent only needs ONE button (PURGE), not two - ensureActionButtons()
+// below just iterates whatever list is here, so a shorter list works with
+// no special-casing.
+//
+// chargeKind reuses "cut" (already a 1-second hold on the server) for
+// Ledger's and Vent's actions rather than asking server/stage.py to learn
+// new hold-kind names - all of these really are 1-second holds, so nothing
+// about the broadcast ring's timing is actually wrong, it just means the
+// ring's internal "kind" label says "cut" even when you're really pressing,
+// skipping, or purging. Nothing ever displays that label as text, only its
 // timing, so this is invisible in play.
 const ACTIONS = {
   wires: [
@@ -67,6 +71,9 @@ const ACTIONS = {
   ledger: [
     { key: "p", action: "press", chargeKind: "cut", label: "HOLD TO PRESS", ms: 1000 },
     { key: "k", action: "skip", chargeKind: "cut", label: "HOLD TO SKIP", ms: 1000 },
+  ],
+  vent: [
+    { key: "v", action: "purge", chargeKind: "cut", label: "HOLD TO PURGE", ms: 1000 },
   ],
 };
 

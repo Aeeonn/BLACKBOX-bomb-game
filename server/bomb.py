@@ -71,7 +71,13 @@ class Bomb:
             self.strikes += 1
             if self.strikes >= self.max_strikes:
                 self.phase = "lost"
-        if all(m.solved for m in self.modules):
+        # T15: needy modules (Module.needy) never "solve" - they just have to
+        # be tended for the whole round, so they're excluded from the win
+        # check entirely. The `non_needy and` guard matters: all([]) is True
+        # in Python, so without it an all-needy round would win on its very
+        # first tick.
+        non_needy = [m for m in self.modules if not m.needy]
+        if non_needy and all(m.solved for m in non_needy):
             self.phase = "won"
 
     def act(self, role: str, index: int, action: dict) -> Result:
