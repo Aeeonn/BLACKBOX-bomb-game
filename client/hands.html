@@ -8,13 +8,10 @@
 <div class="stagewrap"><canvas id="stage" width="900" height="320"></canvas></div>
 <div class="flags" id="flags"></div>
 <div class="hud"><div id="time">--:--</div><div class="strikes" id="strikes"></div><div id="phase"></div></div>
-<p style="color:#6b6b6b;font-size:13px">ARROWS move the probe &middot; hold <b>C</b> 1s to cut &middot; hold <b>D</b> 2s to discharge &middot; TAB switches module</p>
+<p style="color:#6b6b6b;font-size:13px">ARROWS move the probe &middot; TAB switches module &middot; hold the button shown below (or its key) to act</p>
 <div class="bombface" id="grid"></div>
 <div class="readout" id="readout">probe idle</div>
-<div style="margin-top:12px">
-  <button class="holdbtn" id="cut">HOLD TO CUT<span class="fill"></span></button>
-  <button class="holdbtn" id="dis">HOLD TO DISCHARGE<span class="fill"></span></button>
-</div>
+<div id="actionbtns" style="margin-top:12px"></div>
 <div id="log"></div>
 <script type="module">
 import { connect, on, send, logLine, fmtTime, holdButton, ROLE } from "/common/net.js";
@@ -48,6 +45,36 @@ on("probe_result", m => {
 
 function probe() { send({ type: "probe", module: mod, cell: cell }); }
 
+// T14: every module BLIND can act on shows two hold-buttons here, but WHAT
+// those buttons do depends on the module - M1's wires want CUT/DISCHARGE,
+// M2's Ledger tiles want PRESS/SKIP. This table is the one place that maps
+// a module's "kind" (from its own views().hands) to the buttons/keys/labels
+// for it, so adding a future module's action pair never means hardcoding a
+// third pair of buttons in the page - just one more entry here.
+//
+// chargeKind reuses "cut" (already a 1-second hold on the server) for both
+// of Ledger's actions rather than asking server/stage.py to learn two new
+// hold-kind names - both really are 1-second holds, so nothing about the
+// broadcast ring's timing is actually wrong, it just means the ring's
+// internal "kind" label says "cut" even when you're really pressing or
+// skipping a tile. Nothing ever displays that label as text, only its
+// timing, so this is invisible in play.
+const ACTIONS = {
+  wires: [
+    { key: "c", action: "cut", chargeKind: "cut", label: "HOLD TO CUT", ms: 1000 },
+    { key: "d", action: "discharge", chargeKind: "discharge", label: "HOLD TO DISCHARGE", ms: 2000 },
+  ],
+  ledger: [
+    { key: "p", action: "press", chargeKind: "cut", label: "HOLD TO PRESS", ms: 1000 },
+    { key: "k", action: "skip", chargeKind: "cut", label: "HOLD TO SKIP", ms: 1000 },
+  ],
+};
+
+function currentKind() {
+  const v = state && state.modules[mod];
+  return (v && v.kind) || "wires";
+}
+
 function draw() {
   const s = state; if (!s) return;
   document.getElementById("time").textContent = fmtTime(s.time_left);
@@ -57,13 +84,18 @@ function draw() {
   else { ph.textContent = s.phase === "running" ? "" : s.phase.toUpperCase(); ph.className = s.phase; }
   document.getElementById("flags").textContent =
     "casing " + s.flags.casing + " / corner screw " + s.flags.corner_screw + " / " + s.flags.temperature + " to the touch";
-  const v = s.modules[mod] || { count: 0, cut: [] };
+  const v = s.modules[mod] || { count: 0, cut: [], resolved: [] };
   const layout = (s.layouts && s.layouts[mod]) || { slots: [] };
+  // "cut" (wires) and "resolved" (ledger) both mean the same thing here:
+  // this cell can no longer be acted on. Whichever array the current
+  // module's kind actually sends is the one we read.
+  const done = v.kind === "ledger" ? (v.resolved || []) : (v.cut || []);
   renderBombFace(document.getElementById("grid"), layout, (el, slot, i) => {
-    el.className = "slot" + (i === cell ? " sel" : "") + (v.cut[i] ? " cut" : "");
+    el.className = "slot" + (i === cell ? " sel" : "") + (done[i] ? " cut" : "");
     el.textContent = "[" + (i + 1) + "]";
     el.onclick = () => { cell = i; draw(); probe(); };
   });
+  ensureActionButtons(currentKind());
 }
 
 addEventListener("keydown", e => {
@@ -75,33 +107,47 @@ addEventListener("keydown", e => {
 });
 
 const holds = {};
-// Hold durations. Must match server/stage.py's HOLD_DURATIONS_S - that copy
-// is what the broadcast ring's fill rate uses; this copy is what decides
-// when THIS client actually fires the real cut/discharge action. Keep them
-// in sync if either ever changes.
-const HOLD_MS = { cut: 1000, discharge: 2000 };
-
-function beginCharge(kind) { send({ type: "charge", action: "start", kind, module: mod, cell }); }
+function beginCharge(chargeKind) { send({ type: "charge", action: "start", kind: chargeKind, module: mod, cell }); }
 function endCharge() { send({ type: "charge", action: "stop" }); }
 
-function keyHold(key, kind, fireAction) {
+function bindKeyHold(cfg) {
+  const key = cfg.key;
   addEventListener("keydown", e => {
-    if (e.key.toLowerCase() !== key || holds[key]) return;
-    beginCharge(kind);
-    holds[key] = setTimeout(() => { endCharge(); fireAction(); holds[key] = null; }, HOLD_MS[kind]);
+    if (e.key.toLowerCase() !== key || holds[key] || currentKind() !== cfg.moduleKind) return;
+    beginCharge(cfg.chargeKind);
+    holds[key] = setTimeout(() => {
+      endCharge();
+      send({ type: "act", module: mod, action: { [cfg.action]: cell } });
+      holds[key] = null;
+    }, cfg.ms);
   });
   addEventListener("keyup", e => {
     if (e.key.toLowerCase() === key && holds[key]) { clearTimeout(holds[key]); holds[key] = null; endCharge(); }
   });
 }
-keyHold("c", "cut", () => send({ type: "act", module: mod, action: { cut: cell } }));
-keyHold("d", "discharge", () => send({ type: "act", module: mod, action: { discharge: cell } }));
-holdButton(document.getElementById("cut"), HOLD_MS.cut,
-  () => send({ type: "act", module: mod, action: { cut: cell } }),
-  () => beginCharge("cut"), endCharge);
-holdButton(document.getElementById("dis"), HOLD_MS.discharge,
-  () => send({ type: "act", module: mod, action: { discharge: cell } }),
-  () => beginCharge("discharge"), endCharge);
+for (const kind of Object.keys(ACTIONS)) {
+  for (const cfg of ACTIONS[kind]) bindKeyHold({ ...cfg, moduleKind: kind });
+}
+
+// Rebuilds the two visible hold-buttons only when the selected module's
+// kind actually changes (not on every single state tick) - rebuilding a
+// button mid-hold would cancel the hold and feel broken.
+let renderedKind = null;
+function ensureActionButtons(kind) {
+  if (kind === renderedKind) return;
+  renderedKind = kind;
+  const container = document.getElementById("actionbtns");
+  container.innerHTML = "";
+  for (const cfg of (ACTIONS[kind] || ACTIONS.wires)) {
+    const btn = document.createElement("button");
+    btn.className = "holdbtn";
+    btn.innerHTML = cfg.label + '<span class="fill"></span>';
+    holdButton(btn, cfg.ms,
+      () => send({ type: "act", module: mod, action: { [cfg.action]: cell } }),
+      () => beginCharge(cfg.chargeKind), endCharge);
+    container.appendChild(btn);
+  }
+}
 
 connect();
 </script>

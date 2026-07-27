@@ -19,7 +19,9 @@ def test_layout_identical_across_all_roles():
 
 
 def test_layout_shape_matches_wire_count():
-    bomb = Bomb(7, module_count=2)
+    # Pinned to m01 - this checks BraidHue's own "wire" slot kind and one
+    # slot per wire, which is specific to that module, not modules generally.
+    bomb = Bomb(7, module_count=2, pool=["m01"])
     layouts = bomb.snapshot("hands")["layouts"]
     for layout, module in zip(layouts, bomb.modules):
         assert layout["w"] == len(module.wires)

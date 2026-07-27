@@ -214,7 +214,7 @@ Work top to bottom. One ticket per commit. State your plan before coding and wai
 
 > ### ⏸ STOP HERE AND PLAY A REAL ROUND WITH THREE PEOPLE. Everything above is the game's skeleton. Everything below is content. Do not build content before finding out whether the room feels alive. Expect to change T9–T12 based on what happens.
 
-**T14 — M2 "The Ledger" (braille).** Six tiles. HANDS probes dot positions (`dots 1,3,4`) and is **never told the letter**. EYES sees numbers etched on the tiles, shuffled into a different order. BOOK's manual holds the alphabet chart and the letter+number → press/skip table.
+**T14 — M2 "The Ledger."** Six tiles with decorative braille-style dot art (client-side flavour only, no real encoding). HANDS probes a tile and is told its own plain number outright (`reads 4`) - no dot-decoding step. EYES sees a different, independently-generated number printed on each tile. BOOK's manual holds the (HANDS number, EYES number) → PRESS/SKIP table. *(Simplified from the original alphabet-chart idea during playtesting - reading a number aloud plays far better than describing raised dots.)*
 
 **T15 — Needy support + N1 "The Vent."** `Module.needy`, `tick(dt)` through `Bomb.tick`. Every ~45s a valve heats (HANDS probe only); EYES sees which of three vents glows; BOOK has the purge sequence. Unpurged 15s = strike.
 
