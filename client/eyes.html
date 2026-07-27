@@ -1,8 +1,8 @@
 <!doctype html>
-<meta charset="utf-8"><title>EYES</title>
+<meta charset="utf-8"><title>DEAF</title>
 <link rel="stylesheet" href="/common/ui.css">
 <div id="flash"></div>
-<h1>E Y E S</h1><p id="status"></p>
+<h1>D E A F</h1><p id="status"></p>
 <p class="comms-card" id="comms"></p>
 <div class="roster" id="roster"></div>
 <button class="readybtn" id="ready">I'M READY</button>
@@ -18,7 +18,7 @@ import { connect, on, send, logLine, fmtTime, ROLE } from "/common/net.js";
 import { updateOverlay } from "/common/overlay.js";
 import { init as initStage, setPresence, setBomb, findPlayer } from "/common/stage.js";
 import { renderBombFace, paintCharge } from "/common/bombface.js";
-import { COMMS, renderRoster, pauseText } from "/common/roster.js";
+import { COMMS, renderRoster, pauseText, DISPLAY_NAME } from "/common/roster.js";
 document.getElementById("comms").textContent = COMMS[ROLE];
 let mod = 0, state = null, presence = null;
 const SWATCH = { red:"#b33", blue:"#36c", yellow:"#dc3", white:"#eee", black:"#000", green:"#3a3" };
@@ -65,7 +65,7 @@ function draw() {
   const bp = findPlayer(presence, "book");
   const pointedModule = bp && bp.pointer ? bp.pointer.module : null;
   const hint = document.getElementById("pointerhint");
-  hint.textContent = pointedModule == null ? "" : "BOOK is pointing at module " + (pointedModule + 1);
+  hint.textContent = pointedModule == null ? "" : DISPLAY_NAME.book + " is pointing at module " + (pointedModule + 1);
   hint.className = "pointer-hint" + (pointedModule != null ? " active" : "");
   const grid = document.getElementById("grid");
   grid.classList.toggle("pointed", pointedModule === mod);

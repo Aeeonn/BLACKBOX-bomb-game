@@ -1,7 +1,7 @@
 <!doctype html>
-<meta charset="utf-8"><title>BOOK</title>
+<meta charset="utf-8"><title>MUTE</title>
 <link rel="stylesheet" href="/common/ui.css">
-<h1>B O O K</h1><p id="status"></p>
+<h1>M U T E</h1><p id="status"></p>
 <p class="comms-card" id="comms"></p>
 <div class="roster" id="roster"></div>
 <button class="readybtn" id="ready">I'M READY</button>
@@ -20,7 +20,7 @@ import { updateOverlay } from "/common/overlay.js";
 import { updateTimerAudio } from "/common/timer-audio.js";
 import { init as initStage, setPresence, setBomb, findPlayer } from "/common/stage.js";
 import { renderBombFace, paintCharge } from "/common/bombface.js";
-import { COMMS, renderRoster, coreConnected, pauseText } from "/common/roster.js";
+import { COMMS, renderRoster, coreConnected, pauseText, DISPLAY_NAME } from "/common/roster.js";
 document.getElementById("comms").textContent = COMMS[ROLE];
 const CARDS = ["STOP","GO","YES","NO","WAIT","AGAIN","1","2","3","4","LEFT","RIGHT"];
 let cooling = false;
@@ -47,7 +47,7 @@ function arm() {
 document.getElementById("start").onclick = arm;
 
 // T13: ARM stays disabled - client-side only, the server still accepts a
-// start() from anyone - until the roster shows HANDS, EYES and BOOK all
+// start() from anyone - until the roster shows all three core roles
 // connected. This is a UI convenience, not the anti-leak boundary, so it's
 // fine for it to live here instead of in server/room.py.
 function updateLobby(m) {
@@ -55,7 +55,7 @@ function updateLobby(m) {
   const btn = document.getElementById("start");
   const ok = coreConnected(m.roster);
   btn.disabled = !ok;
-  btn.title = ok ? "" : "Waiting for HANDS, EYES and BOOK to connect";
+  btn.title = ok ? "" : "Waiting for " + DISPLAY_NAME.hands + ", " + DISPLAY_NAME.eyes + " and " + DISPLAY_NAME.book + " to connect";
 }
 on("lobby", updateLobby);
 
