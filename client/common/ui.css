@@ -28,6 +28,13 @@ button:hover { background: #2c2c2c; }
 #overlay.won .overlay-label { color: var(--ok); }
 #overlay.lost .overlay-label { color: var(--hot); }
 #overlay .rearm { font-size: 22px; padding: 16px 40px; }
+/* Polish pass: a full dim screen while paused (previously just a small line
+   of HUD text - easy to miss if you'd looked away). Reuses #overlay's own
+   show/flex/dim styling; .paused-label overrides the terser win/lose
+   sizing since "PAUSED - waiting for BLIND, MUTE" is a full sentence, not
+   a single word. */
+#overlay.paused { background: rgba(0,0,0,.82); }
+#overlay .paused-label { font-size: 4vw; letter-spacing: 2px; color: var(--amber); text-align: center; padding: 0 20px; }
 .stagewrap { margin: 10px 0 18px; }
 #stage { width: 100%; max-width: 760px; height: auto; aspect-ratio: 900 / 320;
          background: #111318; border: 1px solid #333; display: block; }
@@ -78,3 +85,10 @@ button:hover { background: #2c2c2c; }
 #start:disabled { opacity: .4; cursor: not-allowed; }
 .role-link { color: var(--fg); display: inline-block; }
 .role-link.taken { color: var(--dim); text-decoration: line-through; }
+
+/* Polish pass: a collapsed-by-default "how do I play this role" explainer,
+   sitting alongside the existing comms-card. Kept out of the way for
+   repeat players, one click away for new ones. */
+.help-toggle { font-size: 12px; padding: 6px 10px; margin: 2px 0 4px; }
+.help-panel { border: 1px dashed #444; padding: 10px 12px; margin: 4px 0 10px;
+              font-size: 13px; color: var(--fg); max-width: 640px; line-height: 1.5; }

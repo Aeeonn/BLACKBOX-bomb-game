@@ -337,6 +337,14 @@ function drawSeat(seat, index, total, w, h, ts) {
   ctx.fill();
   ctx.stroke();
 
+  // Polish pass: cosmetic-only avatar flair reinforcing each role's
+  // condition - purely decorative, carries zero new information (every
+  // role's identity is already shown in plain text by the label below, and
+  // in the roster). Only drawn for seats that are actually occupied, same
+  // as the head/shoulders' own connected-vs-empty styling above.
+  if (seat.connected && seat.role === "hands") drawBlindfold(wagX, -6 + bobY);
+  if (seat.connected && seat.role === "eyes") drawEarmuffs(wagX, -6 + bobY);
+
   ctx.restore();
 
   ctx.save();
@@ -345,6 +353,35 @@ function drawSeat(seat, index, total, w, h, ts) {
   ctx.font = "11px monospace";
   ctx.textAlign = "center";
   ctx.fillText(seat.role.toUpperCase(), p.x, p.y + 40);
+  ctx.restore();
+}
+
+// BLIND's blindfold: a dark band across the eyes. Drawn in the same
+// translated+rotated local space as the head arc above, so (cx, cy) is the
+// head's own centre and the band naturally follows head tilt/bob/wag.
+function drawBlindfold(cx, cy) {
+  ctx.save();
+  ctx.fillStyle = "#111318";
+  ctx.fillRect(cx - 13, cy - 3, 26, 6);
+  ctx.restore();
+}
+
+// DEAF's earmuffs: a thin band over the top of the head plus two small ear
+// cups on either side.
+function drawEarmuffs(cx, cy) {
+  ctx.save();
+  ctx.strokeStyle = "#111318";
+  ctx.fillStyle = "#111318";
+  ctx.lineWidth = 3;
+  ctx.beginPath();
+  ctx.arc(cx, cy, 14, Math.PI * 1.15, Math.PI * 1.85);
+  ctx.stroke();
+  ctx.beginPath();
+  ctx.arc(cx - 12, cy + 2, 5, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.beginPath();
+  ctx.arc(cx + 12, cy + 2, 5, 0, Math.PI * 2);
+  ctx.fill();
   ctx.restore();
 }
 

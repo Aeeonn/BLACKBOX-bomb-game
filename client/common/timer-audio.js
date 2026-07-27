@@ -6,7 +6,10 @@
 // and BOOK.
 import { ROLE } from "/common/net.js";
 
-const ALLOWED = ROLE === "hands" || ROLE === "book";
+// Exported (not just used internally) so client/common/feedback.js can reuse
+// the SAME AudioContext + role gate for strike/solved cues, instead of every
+// audio-playing file opening its own separate context.
+export const ALLOWED = ROLE === "hands" || ROLE === "book";
 
 let ctx = null;
 let lastSlot = -1;
@@ -26,7 +29,7 @@ if (ALLOWED) {
   addEventListener("mousedown", unlock);
 }
 
-function beep(freq, ms) {
+export function beep(freq, ms) {
   if (!ctx) return;
   const osc = ctx.createOscillator();
   const gain = ctx.createGain();

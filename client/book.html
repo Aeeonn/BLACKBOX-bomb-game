@@ -3,6 +3,8 @@
 <link rel="stylesheet" href="/common/ui.css">
 <h1>M U T E</h1><p id="status"></p>
 <p class="comms-card" id="comms"></p>
+<button class="help-toggle" id="helpToggle">? How do I play this role</button>
+<div class="help-panel" id="helpPanel" hidden></div>
 <div class="roster" id="roster"></div>
 <button class="readybtn" id="ready">I'M READY</button>
 <div class="stagewrap"><canvas id="stage" width="900" height="320"></canvas></div>
@@ -18,10 +20,16 @@
 import { connect, on, send, logLine, fmtTime, ROOM, ROLE } from "/common/net.js";
 import { updateOverlay } from "/common/overlay.js";
 import { updateTimerAudio } from "/common/timer-audio.js";
+import { updateFeedback } from "/common/feedback.js";
 import { init as initStage, setPresence, setBomb, findPlayer } from "/common/stage.js";
 import { renderBombFace, paintCharge } from "/common/bombface.js";
-import { COMMS, renderRoster, coreConnected, pauseText, DISPLAY_NAME } from "/common/roster.js";
+import { COMMS, HELP, renderRoster, coreConnected, pauseText, DISPLAY_NAME } from "/common/roster.js";
 document.getElementById("comms").textContent = COMMS[ROLE];
+document.getElementById("helpPanel").textContent = HELP[ROLE];
+document.getElementById("helpToggle").onclick = () => {
+  const panel = document.getElementById("helpPanel");
+  panel.hidden = !panel.hidden;
+};
 const CARDS = ["STOP","GO","YES","NO","WAIT","AGAIN","1","2","3","4","LEFT","RIGHT"];
 let cooling = false;
 const wrap = document.getElementById("cards");
@@ -127,8 +135,9 @@ on("state", s => {
   const p = document.getElementById("phase");
   if (s.payload.paused) { p.textContent = pauseText(presence); p.className = "paused"; }
   else { p.textContent = s.payload.phase === "running" ? "" : s.payload.phase.toUpperCase(); p.className = s.payload.phase; }
-  updateOverlay(s.payload.phase, arm);
+  updateOverlay(s.payload.phase, arm, s.payload.paused, pauseText(presence));
   updateTimerAudio(s.payload.time_left, s.payload.phase);
+  updateFeedback(s.payload.strikes, s.payload.modules.filter(mv => mv.solved).length, s.payload.phase);
   setBomb(s.payload);
   lastPayload = s.payload;
   drawBookShells(s.payload);

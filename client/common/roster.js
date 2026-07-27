@@ -26,6 +26,26 @@ export const COMMS = {
   dispatch: "You are DISPATCH. Voice normal in Discord. Watch the big picture \u2014 timer, strikes, alarms \u2014 and call it out to BLIND.",
 };
 
+// Polish pass: a one-time "how do I actually play this" explainer per role,
+// shown behind a collapsed toggle (see the .help-toggle/.help-panel wiring
+// in hands/eyes/book.html) so it doesn't clutter the page for repeat
+// players, but a brand-new player doesn't need it explained over voice.
+export const HELP = {
+  hands: "Use LEFT/RIGHT arrows to move your probe between cells (or turn a Gauge module's dial). Click a cell to select it directly. "
+    + "Hold the button shown below the bomb face - or its keyboard shortcut letter - for the number of seconds shown to commit: "
+    + "cut a wire, discharge it first if it's warm, press or skip a tile, purge a vent, or lock in a gauge reading. "
+    + "TAB switches to the next module if there's more than one.",
+  eyes: "You see full detail on the bomb - colours, textures, printed numbers - but you cannot hear anyone. "
+    + "Call out what you see so BLIND and MUTE can act on it. TAB switches to the next module.",
+  book: "You hear everyone but cannot speak. Your mouse controls your head - look around, and quick shakes/nods are picked up "
+    + "automatically and shown to everyone. Use the flashcards below to signal DEAF (2 second cooldown). Click a module's shell "
+    + "to point at it for everyone to see. Your manual (right panel, or OPEN MANUAL to print it) holds the answers - read it aloud "
+    + "to guide BLIND and DEAF.",
+  scope: "You see the bomb's internal wiring only - no colours or textures. You are muted; describe the netlist to MUTE by voice "
+    + "(a shared drawing canvas is planned for a later update).",
+  dispatch: "You see the big picture only - timer, strikes, and alarms - never any module detail. Call out what you see to BLIND.",
+};
+
 // True once every required seat (hands/eyes/book) shows connected:true.
 // Deliberately ignores "ready" - see the T13 plan note: ARM only checks who
 // is actually present, not whether they've clicked the READY button.

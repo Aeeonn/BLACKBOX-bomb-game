@@ -11,11 +11,25 @@ function ensure() {
   return el;
 }
 
-// Call this from your existing "state" handler with the bomb's phase.
-// Pass onRearm (a function) only on the page that should offer a REARM
-// button - today that's BOOK. Every other page omits it and gets no button.
-export function updateOverlay(phase, onRearm) {
+// Call this from your existing "state" handler with the bomb's phase. Pass
+// onRearm (a function) only on the page that should offer a REARM button -
+// today that's BOOK. Every other page omits it and gets no button.
+//
+// Polish pass: paused/pauseLabel are optional extra args - pass the round's
+// "paused" flag and roster.js's pauseText(presence) to also show a full,
+// unmissable dim screen while a required role is disconnected (previously
+// this was only a small line of amber HUD text, easy to miss if you'd
+// alt-tabbed). Omitting them (as scope.html/dispatch.html currently do)
+// simply means this page keeps its old behaviour - win/lose only, no pause
+// overlay - so those pages needed zero changes to keep working exactly as
+// before.
+export function updateOverlay(phase, onRearm, paused, pauseLabel) {
   const node = ensure();
+  if (paused) {
+    node.className = "overlay show paused";
+    node.innerHTML = "<div class='overlay-label paused-label'>" + (pauseLabel || "PAUSED") + "</div>";
+    return;
+  }
   if (phase !== "won" && phase !== "lost") {
     node.className = "overlay";
     node.innerHTML = "";
