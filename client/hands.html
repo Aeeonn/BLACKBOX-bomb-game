@@ -56,10 +56,13 @@ on("error", m => logLine("ERROR " + m.text));
 on("probe_result", m => {
   // T16: Gauge only ever has one "cell" (the knob itself), so "cell 1:
   // click" would read oddly - a plain "the knob: click" phrasing fits how
-  // a real player would describe turning a single dial.
+  // a real player would describe turning a single dial. N2's sync port is
+  // the same situation, just with its own noun.
   const readout = document.getElementById("readout");
   if (currentKind() === "gauge") {
     readout.textContent = m.data.text ? ("the knob: " + m.data.text) : "nothing here";
+  } else if (currentKind() === "handshake") {
+    readout.textContent = m.data.text ? ("the port: " + m.data.text) : "nothing here";
   } else {
     readout.textContent = m.data.text ? ("cell " + (m.data.cell + 1) + ": " + m.data.text) : "nothing here";
   }
@@ -116,6 +119,9 @@ const ACTIONS = {
   static: [
     { key: "p", action: "press", chargeKind: "cut", label: "HOLD TO PRESS", ms: HOLD_MS.cut },
   ],
+  handshake: [
+    { key: "h", action: "confirm", chargeKind: "cut", label: "HOLD TO CONFIRM", ms: HOLD_MS.cut },
+  ],
 };
 
 function currentKind() {
@@ -144,7 +150,7 @@ function draw() {
     : (v.cut || []);
   renderBombFace(document.getElementById("grid"), layout, (el, slot, i) => {
     el.className = "slot" + (i === cell ? " sel" : "") + (done[i] ? " cut" : "");
-    el.textContent = v.kind === "gauge" ? "KNOB" : ("[" + (i + 1) + "]");
+    el.textContent = v.kind === "gauge" ? "KNOB" : v.kind === "handshake" ? "PORT" : ("[" + (i + 1) + "]");
     el.onclick = () => { cell = i; draw(); probe(); };
   });
   ensureActionButtons(currentKind());
