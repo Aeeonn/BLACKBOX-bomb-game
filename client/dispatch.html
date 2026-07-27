@@ -2,6 +2,9 @@
 <meta charset="utf-8"><title>DISPATCH</title>
 <link rel="stylesheet" href="/common/ui.css">
 <h1>D I S P A T C H</h1><p id="status"></p>
+<p class="comms-card" id="comms"></p>
+<div class="roster" id="roster"></div>
+<button class="readybtn" id="ready">I'M READY</button>
 <div class="stagewrap"><canvas id="stage" width="900" height="320"></canvas></div>
 <div class="hud" style="font-size:44px"><div id="time">--:--</div><div class="strikes" id="strikes"></div><div id="phase"></div></div>
 <p style="color:#6b6b6b;font-size:13px">Global layer only. No module contents. Talk to HANDS.</p>
@@ -10,13 +13,29 @@
 import { connect, on, send, logLine, fmtTime, ROLE } from "/common/net.js";
 import { updateOverlay } from "/common/overlay.js";
 import { init as initStage, setPresence, setBomb } from "/common/stage.js";
+import { COMMS, renderRoster, pauseText } from "/common/roster.js";
+document.getElementById("comms").textContent = COMMS[ROLE];
+let presence = null;
+
+on("lobby", m => renderRoster(document.getElementById("roster"), m.roster));
+let isReady = false;
+const readyBtn = document.getElementById("ready");
+readyBtn.onclick = () => {
+  isReady = !isReady;
+  send({ type: "ready", value: isReady });
+  readyBtn.classList.toggle("is-ready", isReady);
+  readyBtn.textContent = isReady ? "\u2713 READY" : "I'M READY";
+};
+
 initStage(document.getElementById("stage"), ROLE, send);
-on("presence", m => setPresence(m.payload));
+on("presence", m => { presence = m.payload; setPresence(m.payload); });
 on("log", m => logLine(m.text));
 on("state", s => {
   document.getElementById("time").textContent = fmtTime(s.payload.time_left);
   document.getElementById("strikes").textContent = "X".repeat(s.payload.strikes);
-  document.getElementById("phase").textContent = s.payload.phase === "running" ? "" : s.payload.phase.toUpperCase();
+  const ph = document.getElementById("phase");
+  if (s.payload.paused) { ph.textContent = pauseText(presence); ph.className = "paused"; }
+  else { ph.textContent = s.payload.phase === "running" ? "" : s.payload.phase.toUpperCase(); ph.className = s.payload.phase; }
   updateOverlay(s.payload.phase);
   setBomb(s.payload);
 });

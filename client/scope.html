@@ -2,9 +2,12 @@
 <meta charset="utf-8"><title>SCOPE</title>
 <link rel="stylesheet" href="/common/ui.css">
 <h1>S C O P E</h1><p id="status"></p>
+<p class="comms-card" id="comms"></p>
+<div class="roster" id="roster"></div>
+<button class="readybtn" id="ready">I'M READY</button>
 <div class="stagewrap"><canvas id="stage" width="900" height="320"></canvas></div>
 <div class="flags" id="flags"></div>
-<div class="hud"><div id="time">--:--</div><div class="strikes" id="strikes"></div></div>
+<div class="hud"><div id="time">--:--</div><div class="strikes" id="strikes"></div><div id="phase"></div></div>
 <p style="color:#6b6b6b;font-size:13px">Internal topology only. No colours, no textures. You are MUTED - draw for BOOK. (Phase 5 replaces this readout with the shared canvas.)</p>
 <div id="bombfaces"></div>
 <pre id="nets" style="font-size:15px"></pre>
@@ -14,7 +17,20 @@ import { connect, on, send, logLine, fmtTime, ROLE } from "/common/net.js";
 import { updateOverlay } from "/common/overlay.js";
 import { init as initStage, setPresence, setBomb, findPlayer } from "/common/stage.js";
 import { renderBombFace, paintCharge } from "/common/bombface.js";
+import { COMMS, renderRoster, pauseText } from "/common/roster.js";
+document.getElementById("comms").textContent = COMMS[ROLE];
 let lastPayload = null, presence = null;
+
+on("lobby", m => renderRoster(document.getElementById("roster"), m.roster));
+let isReady = false;
+const readyBtn = document.getElementById("ready");
+readyBtn.onclick = () => {
+  isReady = !isReady;
+  send({ type: "ready", value: isReady });
+  readyBtn.classList.toggle("is-ready", isReady);
+  readyBtn.textContent = isReady ? "\u2713 READY" : "I'M READY";
+};
+
 initStage(document.getElementById("stage"), ROLE, send);
 on("presence", m => { presence = m.payload; setPresence(m.payload); if (lastPayload) drawScopeShells(lastPayload); });
 on("log", m => logLine(m.text));
@@ -58,6 +74,9 @@ on("state", s => {
   const p = s.payload;
   document.getElementById("time").textContent = fmtTime(p.time_left);
   document.getElementById("strikes").textContent = "X".repeat(p.strikes);
+  const ph = document.getElementById("phase");
+  if (p.paused) { ph.textContent = pauseText(presence); ph.className = "paused"; }
+  else { ph.textContent = ""; ph.className = ""; }
   document.getElementById("flags").textContent =
     "board rev " + p.flags.board_rev + " / " + p.flags.jumpers + " jumpers / capacitor " + p.flags.capacitor;
   document.getElementById("nets").textContent = p.modules.map((m, i) =>

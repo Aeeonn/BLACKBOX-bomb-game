@@ -2,12 +2,15 @@
 <meta charset="utf-8"><title>BOOK</title>
 <link rel="stylesheet" href="/common/ui.css">
 <h1>B O O K</h1><p id="status"></p>
+<p class="comms-card" id="comms"></p>
+<div class="roster" id="roster"></div>
+<button class="readybtn" id="ready">I'M READY</button>
 <div class="stagewrap"><canvas id="stage" width="900" height="320"></canvas></div>
 <div class="hud"><div id="time">--:--</div><div class="strikes" id="strikes"></div><div id="phase"></div></div>
 <p style="color:#6b6b6b;font-size:13px">You are MUTED in Discord. Nod, wave, and use the cards. 2s cooldown.</p>
 <div class="cards" id="cards"></div>
 <div id="bombfaces"></div>
-<p style="margin-top:14px"><button id="start">ARM THE BOMB</button>
+<p style="margin-top:14px"><button id="start" disabled>ARM THE BOMB</button>
   <a id="manual" style="color:#e8e4d8;margin-left:14px" target="_blank">OPEN MANUAL</a></p>
 <iframe id="frame" style="width:100%;height:60vh;margin-top:12px;background:#fdfaf2;border:1px solid #444"></iframe>
 <div id="log"></div>
@@ -17,6 +20,8 @@ import { updateOverlay } from "/common/overlay.js";
 import { updateTimerAudio } from "/common/timer-audio.js";
 import { init as initStage, setPresence, setBomb, findPlayer } from "/common/stage.js";
 import { renderBombFace, paintCharge } from "/common/bombface.js";
+import { COMMS, renderRoster, coreConnected, pauseText } from "/common/roster.js";
+document.getElementById("comms").textContent = COMMS[ROLE];
 const CARDS = ["STOP","GO","YES","NO","WAIT","AGAIN","1","2","3","4","LEFT","RIGHT"];
 let cooling = false;
 const wrap = document.getElementById("cards");
@@ -40,6 +45,29 @@ function arm() {
   setTimeout(() => { document.getElementById("frame").src = "/manual/" + ROOM; }, 400);
 }
 document.getElementById("start").onclick = arm;
+
+// T13: ARM stays disabled - client-side only, the server still accepts a
+// start() from anyone - until the roster shows HANDS, EYES and BOOK all
+// connected. This is a UI convenience, not the anti-leak boundary, so it's
+// fine for it to live here instead of in server/room.py.
+function updateLobby(m) {
+  renderRoster(document.getElementById("roster"), m.roster);
+  const btn = document.getElementById("start");
+  const ok = coreConnected(m.roster);
+  btn.disabled = !ok;
+  btn.title = ok ? "" : "Waiting for HANDS, EYES and BOOK to connect";
+}
+on("lobby", updateLobby);
+
+let isReady = false;
+const readyBtn = document.getElementById("ready");
+readyBtn.onclick = () => {
+  isReady = !isReady;
+  send({ type: "ready", value: isReady });
+  readyBtn.classList.toggle("is-ready", isReady);
+  readyBtn.textContent = isReady ? "\u2713 READY" : "I'M READY";
+};
+
 let lastPayload = null, presence = null;
 initStage(document.getElementById("stage"), ROLE, send);
 on("presence", m => { presence = m.payload; setPresence(m.payload); if (lastPayload) drawBookShells(lastPayload); });
@@ -97,8 +125,8 @@ on("state", s => {
   document.getElementById("time").textContent = fmtTime(s.payload.time_left);
   document.getElementById("strikes").textContent = "X".repeat(s.payload.strikes);
   const p = document.getElementById("phase");
-  p.textContent = s.payload.phase === "running" ? "" : s.payload.phase.toUpperCase();
-  p.className = s.payload.phase;
+  if (s.payload.paused) { p.textContent = pauseText(presence); p.className = "paused"; }
+  else { p.textContent = s.payload.phase === "running" ? "" : s.payload.phase.toUpperCase(); p.className = s.payload.phase; }
   updateOverlay(s.payload.phase, arm);
   updateTimerAudio(s.payload.time_left, s.payload.phase);
   setBomb(s.payload);

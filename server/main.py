@@ -24,6 +24,16 @@ async def list_rooms():
     return {c: sorted(r.sockets.keys()) for c, r in ROOMS.items()}
 
 
+@app.get("/api/room/{code}")
+async def room_info(code: str):
+    # T13: lets index.html show a live "who's taken" roster via plain
+    # polling, without opening a websocket just to watch the lobby fill up.
+    room = ROOMS.get(code.upper())
+    if room is None:
+        return {"error": "no such room"}
+    return {"code": code.upper(), "roster": room.roster(), "armed": room.bomb is not None}
+
+
 @app.get("/manual/{code}", response_class=HTMLResponse)
 async def manual(code: str):
     room = ROOMS.get(code.upper())
@@ -60,6 +70,10 @@ async def ws_endpoint(sock: WebSocket):
         pass
     finally:
         room.detach(role, sock)
+        # T13: without this, the remaining players wouldn't see an updated
+        # roster (or a newly-paused timer) until whatever unrelated message
+        # happened to trigger the next broadcast - could be seconds late.
+        await room.broadcast_state()
 
 
 app.mount("/", StaticFiles(directory=str(CLIENT), html=True), name="client")

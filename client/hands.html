@@ -2,6 +2,9 @@
 <meta charset="utf-8"><title>HANDS</title>
 <link rel="stylesheet" href="/common/ui.css">
 <h1>H A N D S</h1><p id="status"></p>
+<p class="comms-card" id="comms"></p>
+<div class="roster" id="roster"></div>
+<button class="readybtn" id="ready">I'M READY</button>
 <div class="stagewrap"><canvas id="stage" width="900" height="320"></canvas></div>
 <div class="flags" id="flags"></div>
 <div class="hud"><div id="time">--:--</div><div class="strikes" id="strikes"></div><div id="phase"></div></div>
@@ -19,10 +22,22 @@ import { updateOverlay } from "/common/overlay.js";
 import { updateTimerAudio } from "/common/timer-audio.js";
 import { init as initStage, setPresence, setBomb } from "/common/stage.js";
 import { renderBombFace } from "/common/bombface.js";
-let mod = 0, cell = 0, state = null;
+import { COMMS, renderRoster, pauseText } from "/common/roster.js";
+document.getElementById("comms").textContent = COMMS[ROLE];
+let mod = 0, cell = 0, state = null, presence = null;
+
+on("lobby", m => renderRoster(document.getElementById("roster"), m.roster));
+let isReady = false;
+const readyBtn = document.getElementById("ready");
+readyBtn.onclick = () => {
+  isReady = !isReady;
+  send({ type: "ready", value: isReady });
+  readyBtn.classList.toggle("is-ready", isReady);
+  readyBtn.textContent = isReady ? "\u2713 READY" : "I'M READY";
+};
 
 initStage(document.getElementById("stage"), ROLE, send);
-on("presence", m => setPresence(m.payload));
+on("presence", m => { presence = m.payload; setPresence(m.payload); });
 on("state", m => { state = m.payload; draw(); updateOverlay(state.phase); updateTimerAudio(state.time_left, state.phase); setBomb(state); });
 on("log", m => logLine(m.text));
 on("error", m => logLine("ERROR " + m.text));
@@ -38,8 +53,8 @@ function draw() {
   document.getElementById("time").textContent = fmtTime(s.time_left);
   document.getElementById("strikes").textContent = "X".repeat(s.strikes);
   const ph = document.getElementById("phase");
-  ph.textContent = s.phase === "running" ? "" : s.phase.toUpperCase();
-  ph.className = s.phase;
+  if (s.paused) { ph.textContent = pauseText(presence); ph.className = "paused"; }
+  else { ph.textContent = s.phase === "running" ? "" : s.phase.toUpperCase(); ph.className = s.phase; }
   document.getElementById("flags").textContent =
     "casing " + s.flags.casing + " / corner screw " + s.flags.corner_screw + " / " + s.flags.temperature + " to the touch";
   const v = s.modules[mod] || { count: 0, cut: [] };

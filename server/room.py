@@ -9,6 +9,7 @@ from .modules.base import Result
 from .stage import Stage
 
 ROLES = ["hands", "eyes", "book", "scope", "dispatch"]
+REQUIRED_ROLES = {"hands", "eyes", "book"}
 CARDS = ["STOP", "GO", "YES", "NO", "WAIT", "AGAIN", "1", "2", "3", "4", "LEFT", "RIGHT"]
 FLASH_COOLDOWN = 2.0
 
@@ -31,6 +32,10 @@ class Room:
         self.last_flash = 0.0
         self.task = None
         self.presence_task = None
+        # T13: lobby roster metadata only - never read by anything that also
+        # touches Bomb state. "connected" is derived from self.sockets rather
+        # than stored separately, so it can never drift out of sync with it.
+        self.ready: dict[str, bool] = {}
 
     def attach(self, role: str, sock) -> bool:
         if role not in ROLES or role in self.sockets:
@@ -44,6 +49,28 @@ class Room:
         if self.sockets.get(role) is sock:
             del self.sockets[role]
             self.stage.detach(role)
+            # A reconnecting player has to say they're ready again - a stale
+            # "ready" from before a disconnect isn't information anyone
+            # should still trust.
+            self.ready.pop(role, None)
+
+    def roster(self) -> list[dict]:
+        """T13: `[{role, connected, ready, required}]` - identical for every
+        viewer, unlike Stage.presence(). Never reads self.bomb, so it can be
+        broadcast freely without becoming a second, unfiltered channel for
+        bomb state."""
+        return [{"role": r, "connected": r in self.sockets,
+                 "ready": self.ready.get(r, False), "required": r in REQUIRED_ROLES}
+                for r in ROLES]
+
+    def is_paused(self) -> bool:
+        """T13: true only while a round is running AND at least one of the
+        three required roles has disconnected. Deliberately NOT tracked as
+        separate state - always recomputed from self.sockets, so it can never
+        desync from what's actually connected."""
+        if self.bomb is None or self.bomb.phase != "running":
+            return False
+        return not REQUIRED_ROLES.issubset(self.sockets.keys())
 
     def _ensure_presence_loop(self) -> None:
         # Presence runs independently of the bomb's 10Hz tick loop, at 20Hz,
@@ -74,11 +101,16 @@ class Room:
         if self.bomb is None:
             for role in list(self.sockets):
                 await self.send(role, {"type": "lobby", "room": self.code,
-                                       "roles": sorted(self.sockets.keys())})
+                                       "roster": self.roster()})
             return
+        # "paused" is a Room-level annotation, not a Bomb one - added after
+        # snapshot() rather than inside it, the same way T4 kept "layouts" a
+        # sibling key instead of touching Bomb's own role-filtered output.
+        paused = self.is_paused()
         for role in list(self.sockets):
-            await self.send(role, {"type": "state", "role": role,
-                                   "payload": self.bomb.snapshot(role)})
+            payload = self.bomb.snapshot(role)
+            payload["paused"] = paused
+            await self.send(role, {"type": "state", "role": role, "payload": payload})
 
     async def broadcast_presence(self) -> None:
         for role in list(self.sockets):
@@ -122,15 +154,26 @@ class Room:
         if self.task is None or self.task.done():
             self.task = asyncio.create_task(self._loop())
 
+    async def _tick_once(self, dt: float) -> None:
+        """One tick's worth of bomb-clock advancement - or none at all while
+        is_paused() is true. Split out from _loop() so a test can drive a
+        single deterministic tick without waiting on the real 0.1s sleep."""
+        if not self.is_paused():
+            self.bomb.tick(dt)
+        await self.broadcast_state()
+
     async def _loop(self) -> None:
         last = time.monotonic()
         try:
             while self.bomb is not None and self.bomb.phase == "running":
                 await asyncio.sleep(0.1)
                 now = time.monotonic()
-                self.bomb.tick(now - last)
+                dt = now - last
+                # Always advance `last`, paused or not - otherwise the dt on
+                # the tick right after a reconnect would cover the entire
+                # paused span in one jump and skip that much game time.
                 last = now
-                await self.broadcast_state()
+                await self._tick_once(dt)
             await self.broadcast_state()
         except asyncio.CancelledError:
             pass
@@ -192,6 +235,14 @@ class Room:
                                         int(msg.get("module", 0)), int(msg.get("cell", 0)))
             else:
                 self.stage.stop_charge(role)
+
+        elif kind == "ready":
+            # Lobby metadata only - never touches self.bomb. Rebroadcasting
+            # immediately (rather than waiting for the next unrelated
+            # message) is what makes the roster feel live on index.html and
+            # on the other players' pages.
+            self.ready[role] = bool(msg.get("value", True))
+            await self.broadcast_state()
 
         elif kind == "hello":
             await self.broadcast_state()

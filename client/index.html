@@ -11,16 +11,54 @@
 <div id="links" style="margin-top:20px;line-height:2"></div>
 <script type="module">
 const roles = ["hands", "eyes", "book", "scope", "dispatch"];
-function render(code) {
+const REQUIRED = new Set(["hands", "eyes", "book"]);
+
+// Falls back to an all-disconnected roster before the first poll resolves,
+// so the links still render immediately on click rather than waiting on a
+// round trip.
+function defaultRoster() {
+  return roles.map(r => ({ role: r, connected: false, ready: false, required: REQUIRED.has(r) }));
+}
+
+function render(code, roster) {
+  const list = roster || defaultRoster();
   document.getElementById("links").innerHTML =
     "<b>Room " + code + "</b><br>" +
-    roles.map(r => '<a style="color:#e8e4d8" href="/' + r + '.html?room=' + code + '&role=' + r + '" target="_blank">' + r.toUpperCase() + '</a>').join("<br>") +
+    list.map(r => {
+      const cls = "role-link" + (r.connected ? " taken" : "");
+      const mark = !r.connected ? "" : (r.ready ? " \u2713" : " \u25CB");
+      const req = r.required ? "" : " (optional)";
+      return '<a class="' + cls + '" href="/' + r.role + '.html?room=' + code + '&role=' + r.role + '" target="_blank">' +
+        r.role.toUpperCase() + req + mark + '</a>';
+    }).join("<br>") +
     '<br><a style="color:#e8e4d8" href="/manual/' + code + '" target="_blank">MANUAL (BOOK prints this)</a>';
 }
+
+// T13: polls the roster metadata endpoint (never bomb state - see
+// server/room.py's roster()) so the host can watch friends' links go from
+// plain to "taken" as they connect, without this page opening a websocket
+// of its own.
+let pollTimer = null;
+function startPolling(code) {
+  if (pollTimer) clearInterval(pollTimer);
+  pollTimer = setInterval(async () => {
+    try {
+      const r = await fetch("/api/room/" + code);
+      const j = await r.json();
+      if (!j.error) render(code, j.roster);
+    } catch (e) { /* transient network hiccup - next poll will retry */ }
+  }, 1500);
+}
+
 document.getElementById("make").onclick = async () => {
   const j = await (await fetch("/api/room", { method: "POST" })).json();
   document.getElementById("code").value = j.room;
   render(j.room);
+  startPolling(j.room);
 };
-document.getElementById("go").onclick = () => render(document.getElementById("code").value.toUpperCase());
+document.getElementById("go").onclick = () => {
+  const code = document.getElementById("code").value.toUpperCase();
+  render(code);
+  startPolling(code);
+};
 </script>

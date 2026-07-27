@@ -1,4 +1,4 @@
-:root { --bg:#111; --fg:#e8e4d8; --dim:#6b6b6b; --hot:#c8402f; --ok:#4c9a5a; }
+:root { --bg:#111; --fg:#e8e4d8; --dim:#6b6b6b; --hot:#c8402f; --ok:#4c9a5a; --amber:#d9a441; }
 * { box-sizing: border-box; }
 body { background: var(--bg); color: var(--fg); font-family: "Courier New", monospace; margin: 0; padding: 18px; }
 h1 { font-size: 18px; letter-spacing: 3px; margin: 0 0 4px; }
@@ -58,3 +58,19 @@ button:hover { background: #2c2c2c; }
 .bombface.pointed { outline: 2px solid #a678b0; outline-offset: 3px; }
 .pointer-hint { color: var(--dim); font-size: 13px; margin: 4px 0 10px; }
 .pointer-hint.active { color: #a678b0; }
+
+/* T13: lobby roster + comms card, shared layout across all five pages. */
+.comms-card { border: 1px solid #3a3a3a; background: #181818; padding: 10px 12px;
+              font-size: 13px; color: var(--fg); margin: 10px 0; max-width: 640px; }
+.roster { margin: 8px 0; font-size: 12px; }
+.roster-item { display: inline-block; padding: 3px 8px; margin: 2px 3px 2px 0;
+               border: 1px solid #333; border-radius: 3px; }
+.roster-item.roster-off { color: var(--dim); border-color: #2a2a2a; }
+.roster-item.roster-on { color: var(--amber); border-color: var(--amber); }
+.roster-item.roster-ready { color: var(--ok); border-color: var(--ok); }
+.readybtn { margin: 6px 0 4px; }
+.readybtn.is-ready { color: var(--ok); border-color: var(--ok); }
+.hud .paused { color: var(--amber); font-size: 15px; }
+#start:disabled { opacity: .4; cursor: not-allowed; }
+.role-link { color: var(--fg); display: inline-block; }
+.role-link.taken { color: var(--dim); text-decoration: line-through; }

@@ -3,6 +3,9 @@
 <link rel="stylesheet" href="/common/ui.css">
 <div id="flash"></div>
 <h1>E Y E S</h1><p id="status"></p>
+<p class="comms-card" id="comms"></p>
+<div class="roster" id="roster"></div>
+<button class="readybtn" id="ready">I'M READY</button>
 <div class="stagewrap"><canvas id="stage" width="900" height="320"></canvas></div>
 <div class="flags" id="flags"></div>
 <div class="hud"><div id="time">--:--</div><div class="strikes" id="strikes"></div><div id="phase"></div></div>
@@ -15,8 +18,20 @@ import { connect, on, send, logLine, fmtTime, ROLE } from "/common/net.js";
 import { updateOverlay } from "/common/overlay.js";
 import { init as initStage, setPresence, setBomb, findPlayer } from "/common/stage.js";
 import { renderBombFace, paintCharge } from "/common/bombface.js";
+import { COMMS, renderRoster, pauseText } from "/common/roster.js";
+document.getElementById("comms").textContent = COMMS[ROLE];
 let mod = 0, state = null, presence = null;
 const SWATCH = { red:"#b33", blue:"#36c", yellow:"#dc3", white:"#eee", black:"#000", green:"#3a3" };
+
+on("lobby", m => renderRoster(document.getElementById("roster"), m.roster));
+let isReady = false;
+const readyBtn = document.getElementById("ready");
+readyBtn.onclick = () => {
+  isReady = !isReady;
+  send({ type: "ready", value: isReady });
+  readyBtn.classList.toggle("is-ready", isReady);
+  readyBtn.textContent = isReady ? "\u2713 READY" : "I'M READY";
+};
 
 initStage(document.getElementById("stage"), ROLE, send);
 on("presence", m => { presence = m.payload; setPresence(m.payload); draw(); });
@@ -33,8 +48,8 @@ function draw() {
   document.getElementById("time").textContent = fmtTime(s.time_left);
   document.getElementById("strikes").textContent = "X".repeat(s.strikes);
   const ph = document.getElementById("phase");
-  ph.textContent = s.phase === "running" ? "" : s.phase.toUpperCase();
-  ph.className = s.phase;
+  if (s.paused) { ph.textContent = pauseText(presence); ph.className = "paused"; }
+  else { ph.textContent = s.phase === "running" ? "" : s.phase.toUpperCase(); ph.className = s.phase; }
   document.getElementById("flags").textContent =
     "serial " + s.flags.serial + " / badge " + s.flags.badge + " / " + s.flags.leds + " LEDs lit / sticker " + s.flags.sticker;
   const v = s.modules[mod] || { wires: [] };
