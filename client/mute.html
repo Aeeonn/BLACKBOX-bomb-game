@@ -36,13 +36,15 @@ const wrap = document.getElementById("cards");
 CARDS.forEach(c => {
   const b = document.createElement("button");
   b.textContent = c;
-  b.onclick = () => {
-    if (cooling) return;
-    send({ type: "flash", card: c });
-    cooling = true; wrap.style.opacity = .35;
-    setTimeout(() => { cooling = false; wrap.style.opacity = 1; }, 2000);
-  };
+  b.onclick = () => { if (!cooling) send({ type: "flash", card: c }); };
   wrap.appendChild(b);
+});
+// The server owns the cooldown and silently drops an early flash, so the
+// board only greys out once a flash is confirmed sent - a dropped click no
+// longer looks like it reached DEAF.
+on("flash_ok", () => {
+  cooling = true; wrap.style.opacity = .35;
+  setTimeout(() => { cooling = false; wrap.style.opacity = 1; }, 2000);
 });
 document.getElementById("manual").href = "/manual/" + ROOM;
 // Shared by the initial ARM button and the overlay's REARM button - the

@@ -121,7 +121,7 @@ class Static(Module):
             "time, then the team tallies how many buzz in total.",
             "DEAF already knows their own lit LED count from their own display.",
             "If the buzzing count is greater than or equal to the LED count, press every "
-            "<b>%s</b> tile. Otherwise, press every <b>%s</b> tile."
+            "<b>%s</b> tile. Otherwise, press every <b>%s</b> tile. (Count zero lit LEDs as one.)"
             % (self.reaches_colour.upper(), self.otherwise_colour.upper()),
             "Do not press a tile of the other colour - that is a strike.",
         ]

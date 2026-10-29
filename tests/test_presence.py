@@ -17,9 +17,10 @@ default regardless of what a client sends, cell-level only when the match's
 precise_pointing flag is on.
 """
 import asyncio
+import json
 
 from server.room import Room
-from server.stage import GESTURE_TTL, HOLD_DURATIONS_S, Stage
+from server.stage import GESTURE_TTL, HOLD_DURATIONS_S, PITCH_LIMIT, YAW_LIMIT, Stage
 
 
 class _DummySocket:
@@ -422,4 +423,52 @@ def test_rearm_clears_a_stale_pointer():
 
     seen_by_deaf = {e["role"]: e for e in room.stage.presence("deaf")["players"]}
     assert seen_by_deaf["mute"]["pointer"] is None
+
+
+def test_presence_carries_no_free_form_client_strings():
+    # Everything in a pose/gesture/point message is rebroadcast, so a
+    # free-form string would be a text channel (hard rule 10) - e.g. MUTE
+    # "gesturing" a full sentence to DEAF through DevTools.
+    stage = Stage()
+    stage.attach("mute")
+    stage.apply_pose("mute", yaw=0.1, pitch=0.1, gaze="cut the red wire")
+    stage.apply_gesture("mute", "cut the red wire")
+    stage.apply_point("mute", {"module": "cut the red wire"})
+
+    entry = next(e for e in stage.presence("deaf")["players"] if e["role"] == "mute")
+    assert entry["gaze"] is None
+    assert entry["gesture"] is None
+    assert entry["pointer"] is None
+
+
+def test_precise_pointer_drops_a_non_index_cell():
+    stage = Stage()
+    stage.attach("mute")
+    stage.precise_pointing = True
+    stage.apply_point("mute", {"module": 1, "cell": "the green one"})
+
+    entry = next(e for e in stage.presence("deaf")["players"] if e["role"] == "mute")
+    assert entry["pointer"] == {"module": 1}
+
+
+def test_presence_stays_strict_json_after_a_non_finite_pose():
+    # NaN/Infinity would serialise as bare NaN, which browsers' JSON.parse
+    # rejects - one bad pose would break presence for every viewer.
+    stage = Stage()
+    stage.attach("deaf")
+    stage.apply_pose("deaf", yaw=float("nan"), pitch=float("inf"), gaze="bomb")
+
+    payload = stage.presence("mute")
+    json.dumps(payload, allow_nan=False)
+    entry = next(e for e in payload["players"] if e["role"] == "deaf")
+    assert entry["yaw"] == 0.0 and entry["pitch"] == 0.0
+
+
+def test_pose_angles_are_clamped():
+    stage = Stage()
+    stage.attach("deaf")
+    stage.apply_pose("deaf", yaw=99.0, pitch=-99.0, gaze=None)
+
+    entry = next(e for e in stage.presence("mute")["players"] if e["role"] == "deaf")
+    assert entry["yaw"] == YAW_LIMIT and entry["pitch"] == -PITCH_LIMIT
 

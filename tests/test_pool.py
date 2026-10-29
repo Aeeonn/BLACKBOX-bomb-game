@@ -87,3 +87,16 @@ def test_room_excludes_scope_only_module_when_scope_is_not_connected():
         room.attach(role, _DummySocket())
     asyncio.run(room.start(modules=4, seed=1))
     assert all(m.id != "test_scope_only" for m in room.bomb.modules)
+
+
+def test_every_bomb_has_a_solvable_module_when_the_pool_allows_one():
+    # Needy modules never solve, so an all-needy bomb can only time out -
+    # 7.5% of default 2-module rounds were unwinnable before Bomb guarded it.
+    # (Needy-only pools stay needy-only: see test_vent/test_handshake.)
+    core = {"blind", "deaf", "mute"}
+    for seed in range(1000):
+        for count in (1, 2):
+            bomb = Bomb(seed, module_count=count, roles=core)
+            assert len(bomb.modules) == count
+            assert any(not m.needy for m in bomb.modules), \
+                "seed %d: an all-needy %d-module bomb is unwinnable" % (seed, count)

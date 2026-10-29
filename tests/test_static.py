@@ -158,6 +158,18 @@ def test_leds_flag_sets_the_threshold_before_clamping():
     m.generate(random.Random(12), {"leds": 2})
     assert m.threshold == 2  # within [1, 5], no clamping needed for this value
 
+
+def test_manual_matches_the_server_when_no_leds_are_lit():
+    # The server clamps a zero LED count up to a threshold of one; the manual
+    # used to say only "the LED count", so a round with zero LEDs and zero
+    # buzzing tiles was solvable on paper (0 >= 0) but struck in play.
+    m = Static()
+    m.generate(random.Random(4), {"leds": 0})
+    for t in m.tiles:
+        t["charged"] = False
+    assert "zero lit LEDs as one" in m.manual_page()
+    assert all(m.tiles[i]["colour"] == m.otherwise_colour for i in m.solution())
+
     m2 = Static()
     m2.generate(random.Random(12), {"leds": 0})
     assert m2.threshold == 1  # clamped up from the degenerate 0

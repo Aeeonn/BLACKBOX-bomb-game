@@ -6,12 +6,40 @@ smuggle PERCEPTION) easy to hold: nothing in this file has access to a wire's
 colour or texture, so it cannot leak one by accident, no matter how the avatar
 rendering evolves later.
 """
+import math
 import time
 from dataclasses import dataclass
 
 ROLES = ("blind", "deaf", "mute", "scope", "dispatch")
 GESTURE_TTL = 1.2   # seconds a gesture stays visible before clearing itself
 MOVING_TTL = 0.5    # seconds after a pose update before "moving" clears
+
+# Closed vocabularies for the free-form presence fields. Everything a client
+# puts in a pose/gesture/point message is rebroadcast to other players, so an
+# unchecked string here would be a covert text-chat channel (hard rule 10)
+# readable in DevTools - and a non-finite float would serialise as bare NaN,
+# which browsers' JSON.parse rejects, breaking presence for the whole room.
+GAZES = ("bomb", "manual", "player")
+GESTURES = ("nod", "shake", "shrug")
+YAW_LIMIT = math.pi
+PITCH_LIMIT = math.pi / 2
+
+
+def _angle(value, limit: float) -> float:
+    try:
+        v = float(value)
+    except (TypeError, ValueError):
+        return 0.0
+    if not math.isfinite(v):
+        return 0.0
+    return max(-limit, min(limit, v))
+
+
+def _index(value) -> int | None:
+    """A slot/module index from a client message, or None if it isn't one."""
+    if isinstance(value, bool) or not isinstance(value, int) or value < 0:
+        return None
+    return value
 
 # Canonical hold durations for the commit-charge ring (AGENTS.md hard rule 12:
 # "1s hold (2s discharge)"). The server owns these so the ring's fill rate is
@@ -87,14 +115,14 @@ class Stage:
         a = self.avatars.get(role)
         if a is None:
             return
-        a.yaw = float(yaw)
-        a.pitch = float(pitch)
-        a.gaze = gaze
+        a.yaw = _angle(yaw, YAW_LIMIT)
+        a.pitch = _angle(pitch, PITCH_LIMIT)
+        a.gaze = gaze if gaze in GAZES else None
         a.last_pose_at = time.monotonic()
 
     def apply_gesture(self, role: str, kind: str) -> None:
         a = self.avatars.get(role)
-        if a is None:
+        if a is None or kind not in GESTURES:
             return
         a.gesture = kind
         a.gesture_at = time.monotonic()
@@ -107,16 +135,17 @@ class Stage:
         a = self.avatars.get(role)
         if a is None:
             return
-        if target is None or "module" not in target:
+        module = _index(target.get("module")) if isinstance(target, dict) else None
+        if module is None:
             a.pointer = None
             return
         # Module-level resolution by default, regardless of what a client
         # sends: a client cannot elevate its own precision by including a
         # "cell" the server doesn't allow. Precision is a match-wide flag,
         # not a per-message client choice.
-        module = target["module"]
-        if self.precise_pointing and "cell" in target:
-            a.pointer = {"module": module, "cell": target["cell"]}
+        cell = _index(target.get("cell"))
+        if self.precise_pointing and cell is not None:
+            a.pointer = {"module": module, "cell": cell}
         else:
             a.pointer = {"module": module}
 
@@ -130,7 +159,7 @@ class Stage:
         if role != "blind":
             return
         a = self.avatars.get(role)
-        if a is None:
+        if a is None or _index(module) is None or _index(cell) is None:
             return
         a.probe = {"module": module, "cell": cell}
 
@@ -143,10 +172,10 @@ class Stage:
         or delayed, and a client can't lie about how fast it fills. See
         AGENTS.md hard rule 12 and T10.
         """
-        if role != "blind" or kind not in HOLD_DURATIONS_S:
+        if role != "blind" or not isinstance(kind, str) or kind not in HOLD_DURATIONS_S:
             return
         a = self.avatars.get(role)
-        if a is None:
+        if a is None or _index(module) is None or _index(cell) is None:
             return
         a.charge = {"kind": kind, "module": module, "cell": cell, "started_at": time.monotonic()}
 

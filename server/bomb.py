@@ -62,6 +62,18 @@ class Bomb:
             m.generate(rng, all_flags)
             self.modules.append(m)
 
+        # Needy modules never solve (see _settle), so an all-needy draw can
+        # only ever end in a timeout DETONATED - 7.5% of default 2-module
+        # rounds before this guard. Swapping one for a solvable module keeps
+        # every other seed's draw byte-identical. Generic over Module.needy,
+        # and a deliberate no-op when the pool offers nothing solvable (the
+        # needy testbenches pin needy-only pools on purpose).
+        solvable = [mid for mid in eligible if not REGISTRY[mid].needy]
+        if self.modules and solvable and all(m.needy for m in self.modules):
+            m = REGISTRY[rng.choice(solvable)]()
+            m.generate(rng, all_flags)
+            self.modules[0] = m
+
         self.time_left = seconds
         self.strikes = 0
         self.max_strikes = 3

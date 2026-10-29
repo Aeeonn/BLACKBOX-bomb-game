@@ -46,6 +46,7 @@ initStage(document.getElementById("stage"), ROLE, send);
 on("presence", m => { presence = m.payload; setPresence(m.payload); draw(); });
 on("state", m => {
   state = m.payload;
+  if (mod >= state.modules.length) mod = 0;
   draw();
   updateOverlay(state.phase, undefined, state.paused, pauseText(presence));
   // updateFeedback's audio half is a no-op for DEAF (see feedback.js's own
@@ -150,7 +151,7 @@ function draw() {
   });
 }
 addEventListener("keydown", e => {
-  if (e.key === "Tab" && state) { e.preventDefault(); mod = (mod + 1) % state.modules.length; draw(); }
+  if (e.key === "Tab" && state && state.modules.length) { e.preventDefault(); mod = (mod + 1) % state.modules.length; draw(); }
 });
 connect();
 </script>

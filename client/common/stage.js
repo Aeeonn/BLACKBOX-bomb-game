@@ -44,6 +44,7 @@ const YAW_RANGE = 0.6;             // radians of head yaw at full mouse deflecti
 const PITCH_RANGE = 0.4;           // radians of head pitch at full mouse deflection
 const MANUAL_GAZE_PITCH = 0.22;    // pitch past this (looking down) => gaze:"manual"
 const POSE_SEND_HZ_MS = 100;       // ~10Hz outgoing pose - well under presence's 20Hz
+const POSE_EPSILON = 0.004;        // radians; smaller changes aren't worth a message
 const GESTURE_WINDOW_MS = 500;     // how far back the shake/nod detector looks
 const GESTURE_THRESHOLD = 0.9;     // oscillation "energy" needed to fire
 const GESTURE_MARGIN = 1.3;        // how much bigger one axis must be than the other
@@ -140,6 +141,8 @@ let looping = false;
 let sendFn = () => {};
 let gestureDetector = null;
 let lastPoseSentAt = -Infinity;
+let lastSentPose = null;   // {yaw, pitch, gaze} - null forces the next tick to send
+let myRole = null;
 
 // Third argument is the same `send` exported by common/net.js - passed in
 // rather than imported directly so this file still has zero import of
@@ -149,6 +152,7 @@ let lastPoseSentAt = -Infinity;
 export function init(canvasEl, role, send) {
   canvas = canvasEl;
   ctx = canvas.getContext("2d");
+  myRole = role;
   sendFn = typeof send === "function" ? send : () => {};
   gestureDetector = makeGestureDetector();
   seats = seatOrder(role).map(r => ({
@@ -182,6 +186,16 @@ export function init(canvasEl, role, send) {
 export function setPresence(payload) {
   const byRole = {};
   for (const p of (payload.players || [])) byRole[p.role] = p;
+  // Poses are only sent on change, so if the server's copy of our own pose
+  // ever disagrees with what we last sent (it resets to zero when a socket
+  // reconnects), forget it and the next tick resends.
+  const own = byRole[myRole];
+  if (own && "yaw" in own && lastSentPose &&
+      (Math.abs(own.yaw - lastSentPose.yaw) > POSE_EPSILON ||
+       Math.abs(own.pitch - lastSentPose.pitch) > POSE_EPSILON ||
+       own.gaze !== lastSentPose.gaze)) {
+    lastSentPose = null;
+  }
   for (const seat of seats) {
     const p = byRole[seat.role];
     if (!p) continue;
@@ -222,14 +236,22 @@ function tick(ts) {
   }
 
   if (ts - lastPoseSentAt > POSE_SEND_HZ_MS) {
-    lastPoseSentAt = ts;
     const yaw = parallax.x * YAW_RANGE;
     const pitch = parallax.y * PITCH_RANGE;
     // "manual" stands in for looking down at MUTE's lectern until T12 gives
     // MUTE an actual in-world manual object to look at; "bomb" is the
     // sensible default since that's what's in front of the camera otherwise.
     const gaze = pitch > MANUAL_GAZE_PITCH ? "manual" : "bomb";
-    sendFn({ type: "pose", yaw, pitch, gaze });
+    // Only on change: the server marks a seat "moving" for half a second
+    // after every pose, so sending unconditionally made every connected
+    // player look permanently in motion - BLIND's sonar pulsed nonstop.
+    if (!lastSentPose || gaze !== lastSentPose.gaze ||
+        Math.abs(yaw - lastSentPose.yaw) > POSE_EPSILON ||
+        Math.abs(pitch - lastSentPose.pitch) > POSE_EPSILON) {
+      lastPoseSentAt = ts;
+      lastSentPose = { yaw, pitch, gaze };
+      sendFn({ type: "pose", yaw, pitch, gaze });
+    }
   }
 
   render(ts);

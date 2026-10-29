@@ -1,6 +1,7 @@
 
 """Room: sockets, role assignment, message handling, tick loop."""
 import asyncio
+import math
 import random
 import time
 
@@ -12,8 +13,30 @@ ROLES = ["blind", "deaf", "mute", "scope", "dispatch"]
 REQUIRED_ROLES = {"blind", "deaf", "mute"}
 CARDS = ["STOP", "GO", "YES", "NO", "WAIT", "AGAIN", "1", "2", "3", "4", "LEFT", "RIGHT"]
 FLASH_COOLDOWN = 2.0
+# Bounds for a client's ARM request. Difficulty is module count (AGENTS.md),
+# so the count is the real knob; the bounds only stop a stray or hostile
+# message from building a thousand-module bomb.
+MODULE_RANGE = (1, 8)
+SECONDS_RANGE = (30.0, 3600.0)
 
 ROOMS: dict[str, "Room"] = {}
+
+
+def _int(value, default: int | None = None) -> int | None:
+    """Lenient int parse for a client-supplied field: `default` instead of an
+    exception for null, junk strings, bools or non-finite numbers. Every
+    message field is untrusted - one malformed value must cost the sender
+    that one message, never their seat."""
+    if isinstance(value, bool):
+        return default
+    try:
+        return int(value)
+    except (TypeError, ValueError, OverflowError):
+        return default
+
+
+def _clamp(value, lo, hi):
+    return max(lo, min(hi, value))
 
 
 def new_code() -> str:
@@ -187,16 +210,27 @@ class Room:
         kind = msg.get("type")
 
         if kind == "start":
-            await self.start(seed=msg.get("seed"),
-                             modules=int(msg.get("modules", 2)),
-                             seconds=float(msg.get("seconds", 300)),
+            try:
+                seconds = float(msg.get("seconds", 300))
+            except (TypeError, ValueError):
+                seconds = 300.0
+            if not math.isfinite(seconds):
+                seconds = 300.0
+            await self.start(seed=_int(msg.get("seed")),
+                             modules=_clamp(_int(msg.get("modules"), 2), *MODULE_RANGE),
+                             seconds=_clamp(seconds, *SECONDS_RANGE),
                              probe_echo=bool(msg.get("probe_echo", True)),
                              precise_pointing=bool(msg.get("precise_pointing", False)),
                              mirror=bool(msg.get("mirror", False)))
 
         elif kind == "act" and self.bomb is not None:
-            idx = int(msg.get("module", 0))
-            r = self.bomb.act(role, idx, msg.get("action", {}))
+            idx, action = _int(msg.get("module")), msg.get("action")
+            # Paused means paused: the clock and needy modules already stop
+            # while a required player is missing, so BLIND's hands do too -
+            # otherwise a cut could land while DEAF or MUTE can't see it.
+            if idx is None or not isinstance(action, dict) or self.is_paused():
+                return
+            r = self.bomb.act(role, idx, action)
             if r is Result.STRIKE:
                 await self.log("STRIKE  (%d/%d)" % (self.bomb.strikes, self.bomb.max_strikes))
             elif r is Result.SOLVED:
@@ -204,8 +238,9 @@ class Room:
             await self.broadcast_state()
 
         elif kind == "probe" and self.bomb is not None:
-            idx = int(msg.get("module", 0))
-            cell = int(msg.get("cell", 0))
+            idx, cell = _int(msg.get("module")), _int(msg.get("cell"))
+            if idx is None or cell is None:
+                return
             # Only the indices go to Stage - never `data` (the inspect()
             # result below), which is what keeps the descriptor text unicast.
             self.stage.apply_probe(role, idx, cell)
@@ -237,8 +272,10 @@ class Room:
             # self.bomb, since Stage never needs to know whether a bomb
             # exists to track where BLIND's hold currently is.
             if msg.get("action") == "start":
-                self.stage.start_charge(role, msg.get("kind", ""),
-                                        int(msg.get("module", 0)), int(msg.get("cell", 0)))
+                module, cell = _int(msg.get("module")), _int(msg.get("cell"))
+                # No ring for a commit that a paused round would refuse anyway.
+                if module is not None and cell is not None and not self.is_paused():
+                    self.stage.start_charge(role, msg.get("kind", ""), module, cell)
             else:
                 self.stage.stop_charge(role)
 

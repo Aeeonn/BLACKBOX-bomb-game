@@ -14,7 +14,8 @@ desync from what's actually connected.
 import asyncio
 import json
 
-from server.room import Room
+from server.bomb import Bomb
+from server.room import MODULE_RANGE, Room
 
 
 class _RecordingSocket:
@@ -214,3 +215,76 @@ def test_detaching_mid_round_immediately_rebroadcasts_the_paused_state():
     asyncio.run(room.broadcast_state())
 
     assert blind.sent[-1]["payload"]["paused"] is True
+
+
+def _core_room(code):
+    room = Room(code)
+    socks = {r: _RecordingSocket() for r in ("blind", "deaf", "mute")}
+    for r, s in socks.items():
+        room.attach(r, s)
+    return room, socks
+
+
+def test_malformed_messages_are_ignored_instead_of_raising():
+    # Any exception escaping handle() used to end the websocket loop in
+    # main.py and detach the sender - a null probe cell from BLIND's arrow
+    # keys on a one-slot module was enough to kick BLIND and pause the round.
+    room, socks = _core_room("MAL1")
+    asyncio.run(room.start(modules=1, seed=1))
+    bad = [
+        {"type": "probe", "module": 0, "cell": None},
+        {"type": "probe", "module": "first", "cell": 0},
+        {"type": "act", "module": None, "action": {"cut": 0}},
+        {"type": "act", "module": 0, "action": "cut everything"},
+        {"type": "charge", "action": "start", "kind": "cut", "module": 0, "cell": None},
+        {"type": "charge", "action": "start", "kind": ["cut"], "module": 0, "cell": 0},
+        {"type": "pose", "yaw": "left", "pitch": None, "gaze": {"at": "bomb"}},
+        {"type": "gesture", "kind": None},
+        {"type": "point", "target": "module 1"},
+    ]
+    for msg in bad:
+        asyncio.run(room.handle("blind", socks["blind"], msg))
+    assert room.bomb.strikes == 0
+    assert room.stage.avatars["blind"].charge is None
+
+
+def test_arm_request_is_clamped_and_sanitised():
+    room, socks = _core_room("ARM1")
+    asyncio.run(room.handle("mute", socks["mute"],
+                            {"type": "start", "modules": 1000, "seconds": 1, "seed": "abc"}))
+    assert len(room.bomb.modules) == MODULE_RANGE[1]
+    assert room.bomb.time_left == 30.0
+    assert isinstance(room.bomb.seed, int)
+
+    room.bomb.phase = "lost"
+    asyncio.run(room.handle("mute", socks["mute"],
+                            {"type": "start", "modules": "lots", "seconds": "forever"}))
+    assert len(room.bomb.modules) == 2
+    assert room.bomb.time_left == 300.0
+
+
+def test_blind_cannot_act_while_the_round_is_paused():
+    room, socks = _core_room("PAU1")
+    asyncio.run(room.start(modules=1, seed=1))
+    room.bomb = Bomb(1, module_count=1, pool=["m01"])
+    wire = room.bomb.modules[0].solution()[0]
+    act = {"type": "act", "module": 0, "action": {"cut": wire}}
+
+    room.detach("mute", socks["mute"])
+    asyncio.run(room.handle("blind", socks["blind"], act))
+    assert room.bomb.modules[0].wires[wire]["cut"] is False
+    assert room.bomb.strikes == 0, "a paused round must not take actions at all"
+
+    room.attach("mute", _RecordingSocket())
+    asyncio.run(room.handle("blind", socks["blind"], act))
+    assert room.bomb.modules[0].wires[wire]["cut"] or room.bomb.strikes == 1, \
+        "once unpaused, the same action must go through again"
+
+
+def test_no_charge_ring_starts_while_paused():
+    room, socks = _core_room("PAU2")
+    asyncio.run(room.start(modules=1, seed=1))
+    room.detach("deaf", socks["deaf"])
+    asyncio.run(room.handle("blind", socks["blind"],
+        {"type": "charge", "action": "start", "kind": "cut", "module": 0, "cell": 0}))
+    assert room.stage.avatars["blind"].charge is None

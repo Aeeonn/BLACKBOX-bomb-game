@@ -1,5 +1,6 @@
 
 """FastAPI entrypoint.  python -m uvicorn server.main:app --reload --port 8000"""
+import logging
 from pathlib import Path
 
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
@@ -10,6 +11,7 @@ from .room import ROOMS, Room, new_code
 
 CLIENT = Path(__file__).resolve().parent.parent / "client"
 app = FastAPI(title="BLACKBOX")
+log = logging.getLogger("uvicorn.error")
 
 
 @app.post("/api/room")
@@ -65,7 +67,22 @@ async def ws_endpoint(sock: WebSocket):
     try:
         await room.broadcast_state()
         while True:
-            await room.handle(role, sock, await sock.receive_json())
+            try:
+                msg = await sock.receive_json()
+            except (ValueError, TypeError, KeyError):
+                continue  # not JSON at all - drop the frame, keep the player
+            if not isinstance(msg, dict):
+                continue
+            # Failures are isolated per message. Before this, any exception
+            # from one malformed message fell through to the outer handler
+            # and detached the sender - pausing the round for everyone over
+            # a single bad field.
+            try:
+                await room.handle(role, sock, msg)
+            except Exception:
+                log.exception("ignored bad %r message from %s in room %s",
+                              msg.get("type"), role, code)
+                await room.send(role, {"type": "error", "text": "ignored a malformed message"})
     except WebSocketDisconnect:
         pass
     except Exception:

@@ -16,7 +16,8 @@
 <div id="actionbtns" style="margin-top:12px"></div>
 <div id="log"></div>
 <script type="module">
-import { connect, on, send, logLine, fmtTime, holdButton, ROLE } from "/common/net.js";
+import { connect, on, send, logLine, fmtTime, ROLE } from "/common/net.js";
+import { makeHold } from "/common/hold.js";
 import { updateOverlay } from "/common/overlay.js";
 import { updateTimerAudio } from "/common/timer-audio.js";
 import { updateFeedback } from "/common/feedback.js";
@@ -45,6 +46,10 @@ initStage(document.getElementById("stage"), ROLE, send);
 on("presence", m => { presence = m.payload; setPresence(m.payload); });
 on("state", m => {
   state = m.payload;
+  // A REARM can bring a bomb with fewer modules or slots than the last one.
+  if (mod >= state.modules.length) { mod = 0; cell = 0; }
+  if (cell >= slotCount()) cell = 0;
+  if (state.phase !== "running" || state.paused) hold.cancel();
   draw();
   updateOverlay(state.phase, undefined, state.paused, pauseText(presence));
   updateTimerAudio(state.time_left, state.phase);
@@ -69,6 +74,24 @@ on("probe_result", m => {
 });
 
 function probe() { send({ type: "probe", module: mod, cell: cell }); }
+
+// The shared layout is the one count every module has - views().blind only
+// carries "count" for some kinds (Handshake and Gauge have none), and a
+// missing count used to turn the arrow keys into cell=NaN.
+function slotCount() {
+  const layout = state && state.layouts && state.layouts[mod];
+  return layout ? layout.slots.length : 0;
+}
+
+// Every way of moving the probe goes through here, so an in-progress hold is
+// always cancelled before its target changes.
+function moveTo(newMod, newCell) {
+  hold.cancel();
+  mod = newMod;
+  cell = Math.max(0, Math.min(slotCount() - 1, newCell));
+  draw();
+  probe();
+}
 
 // T14: every module BLIND can act on shows hold-buttons here, but WHAT
 // those buttons do depends on the module - M1's wires want CUT/DISCHARGE,
@@ -151,7 +174,7 @@ function draw() {
   renderBombFace(document.getElementById("grid"), layout, (el, slot, i) => {
     el.className = "slot" + (i === cell ? " sel" : "") + (done[i] ? " cut" : "");
     el.textContent = v.kind === "gauge" ? "KNOB" : v.kind === "handshake" ? "PORT" : ("[" + (i + 1) + "]");
-    el.onclick = () => { cell = i; draw(); probe(); };
+    el.onclick = () => moveTo(mod, i);
   });
   ensureActionButtons(currentKind());
 }
@@ -162,45 +185,58 @@ function draw() {
 // with {turn: "ccw"/"cw"} and re-probe the single knob for fresh tactile
 // feedback, rather than changing `cell` (which stays 0 the whole round).
 addEventListener("keydown", e => {
-  const v = state && state.modules[mod];
-  if (!v) return;
+  if (!state || !state.modules.length) return;
+  if (e.key === "Tab") { e.preventDefault(); moveTo((mod + 1) % state.modules.length, 0); return; }
+  if (e.key !== "ArrowRight" && e.key !== "ArrowLeft") return;
   if (currentKind() === "gauge") {
-    if (e.key === "ArrowRight") { send({ type: "act", module: mod, action: { turn: "cw" } }); probe(); }
-    if (e.key === "ArrowLeft") { send({ type: "act", module: mod, action: { turn: "ccw" } }); probe(); }
-    if (e.key === "Tab") { e.preventDefault(); mod = (mod + 1) % state.modules.length; cell = 0; draw(); probe(); }
+    hold.cancel();
+    send({ type: "act", module: mod, action: { turn: e.key === "ArrowRight" ? "cw" : "ccw" } });
+    probe();
     return;
   }
-  if (e.key === "ArrowRight") { cell = Math.min(v.count - 1, cell + 1); draw(); probe(); }
-  if (e.key === "ArrowLeft") { cell = Math.max(0, cell - 1); draw(); probe(); }
-  if (e.key === "Tab") { e.preventDefault(); mod = (mod + 1) % state.modules.length; cell = 0; draw(); probe(); }
+  moveTo(mod, cell + (e.key === "ArrowRight" ? 1 : -1));
 });
 
-const holds = {};
-function beginCharge(chargeKind) { send({ type: "charge", action: "start", kind: chargeKind, module: mod, cell }); }
-function endCharge() { send({ type: "charge", action: "stop" }); }
-
-function bindKeyHold(cfg) {
-  const key = cfg.key;
-  addEventListener("keydown", e => {
-    if (e.key.toLowerCase() !== key || holds[key] || currentKind() !== cfg.moduleKind) return;
-    beginCharge(cfg.chargeKind);
-    holds[key] = setTimeout(() => {
-      endCharge();
-      send({ type: "act", module: mod, action: { [cfg.action]: cell } });
-      holds[key] = null;
-    }, cfg.ms);
-  });
-  addEventListener("keyup", e => {
-    if (e.key.toLowerCase() === key && holds[key]) { clearTimeout(holds[key]); holds[key] = null; endCharge(); }
-  });
-}
-for (const kind of Object.keys(ACTIONS)) {
-  for (const cfg of ACTIONS[kind]) bindKeyHold({ ...cfg, moduleKind: kind });
+const hold = makeHold({
+  onStart: h => send({ type: "charge", action: "start", kind: h.cfg.chargeKind,
+                       module: h.target.module, cell: h.target.cell }),
+  onCancel: () => send({ type: "charge", action: "stop" }),
+  onCommit: h => {
+    send({ type: "charge", action: "stop" });
+    send({ type: "act", module: h.target.module, action: { [h.cfg.action]: h.target.cell } });
+  },
+});
+function startHold(cfg) {
+  if (state && state.phase === "running" && !state.paused) hold.start(cfg, { module: mod, cell });
 }
 
-// Rebuilds the two visible hold-buttons only when the selected module's
-// kind actually changes (not on every single state tick) - rebuilding a
-// button mid-hold would cancel the hold and feel broken.
+// e.repeat is ignored so a key that's still held after its commit can't
+// silently arm and fire a second time - committing again takes a fresh press.
+addEventListener("keydown", e => {
+  if (e.repeat) return;
+  const cfg = (ACTIONS[currentKind()] || []).find(c => c.key === e.key.toLowerCase());
+  if (cfg) startHold(cfg);
+});
+addEventListener("keyup", e => {
+  if (hold.active && hold.active.cfg.key === e.key.toLowerCase()) hold.cancel();
+});
+// A keyup that happens in another window never arrives here, so leaving the
+// page mid-hold cancels it rather than letting it run to a commit.
+addEventListener("blur", () => hold.cancel());
+
+// The button fill follows the one shared hold, whether it was started by
+// mouse, touch or keyboard.
+(function animateHold() {
+  for (const btn of document.querySelectorAll("#actionbtns .holdbtn")) {
+    const mine = hold.active && hold.active.cfg === btn._cfg;
+    btn.querySelector(".fill").style.width = (mine ? hold.progress() * 100 : 0) + "%";
+  }
+  requestAnimationFrame(animateHold);
+})();
+
+// Rebuilds the visible hold-buttons only when the selected module's kind
+// actually changes (not on every single state tick) - rebuilding a button
+// mid-hold would cancel the hold and feel broken.
 let renderedKind = null;
 function ensureActionButtons(kind) {
   if (kind === renderedKind) return;
@@ -210,10 +246,12 @@ function ensureActionButtons(kind) {
   for (const cfg of (ACTIONS[kind] || ACTIONS.wires)) {
     const btn = document.createElement("button");
     btn.className = "holdbtn";
+    btn._cfg = cfg;
     btn.innerHTML = cfg.label + '<span class="fill"></span>';
-    holdButton(btn, cfg.ms,
-      () => send({ type: "act", module: mod, action: { [cfg.action]: cell } }),
-      () => beginCharge(cfg.chargeKind), endCharge);
+    btn.addEventListener("pointerdown", () => startHold(cfg));
+    for (const ev of ["pointerup", "pointerleave", "pointercancel"]) {
+      btn.addEventListener(ev, () => { if (hold.active && hold.active.cfg === cfg) hold.cancel(); });
+    }
     container.appendChild(btn);
   }
 }
