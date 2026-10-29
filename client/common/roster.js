@@ -31,17 +31,19 @@ export const COMMS = {
 // in blind/deaf/mute.html) so it doesn't clutter the page for repeat
 // players, but a brand-new player doesn't need it explained over voice.
 export const HELP = {
-  blind: "Use LEFT/RIGHT arrows to move your probe between cells (or turn a Gauge module's dial). Click a cell to select it directly. "
-    + "Hold the button shown below the bomb face - or its keyboard shortcut letter - for the number of seconds shown to commit: "
-    + "cut a wire, discharge it first if it's warm, press or skip a tile, purge a vent, or lock in a gauge reading. "
-    + "TAB switches to the next module if there's more than one.",
-  deaf: "You see full detail on the bomb - colours, textures, printed numbers - but you cannot hear anyone. "
-    + "Call out what you see so BLIND and MUTE can act on it. TAB switches to the next module.",
-  mute: "You hear everyone but cannot speak. Your mouse controls your head - look around, and quick shakes/nods are picked up "
-    + "automatically and shown to everyone. Use the flashcards below to signal DEAF (2 second cooldown). Click a module's shell "
-    + "to point at it for everyone to see. Your manual (right panel, or OPEN MANUAL to print it) holds the answers - read it aloud "
-    + "to guide BLIND and DEAF.",
-  scope: "You see the bomb's internal wiring only - no colours or textures. You are muted; describe the netlist to MUTE by voice "
+  blind: "LEFT/RIGHT arrows move your fingertip between cells (on a Gauge they turn the knob). Click a cell to jump to it. "
+    + "Each touch tells you what you feel there - describe it out loud. To act, hold the key shown on a button "
+    + "(or the button itself) until the bar fills: cut a wire, discharge a warm one first, press or skip a tile, purge a vent, "
+    + "lock in a gauge, confirm a sync. Everyone sees that bar filling on the bomb, so MUTE can stop you. "
+    + "Moving your fingertip mid-hold cancels it. TAB switches module.",
+  deaf: "You see full detail on the bomb - colours, printed numbers, letters, the needle, which vent glows - but you cannot hear anyone. "
+    + "Call out what you see so BLIND and MUTE can act on it. BLIND's blue fingertip shows where their hand is; a red bar means "
+    + "they are committing to that cell right now. MUTE's flashcards appear full-screen. TAB switches module.",
+  mute: "You hear everyone but cannot speak. Your manual (right) holds the answers. Signal DEAF with the flashcards - "
+    + "SPACE flashes STOP, and every card shows its key - one card every 2 seconds. Move your mouse over the room to move your head: "
+    + "quick side-to-side is a shake, up-and-down a nod, and looking down shows everyone you are reading. Click a module "
+    + "to point at it for everyone to see. When BLIND starts holding, a red bar fills on that cell - that is your moment to slam STOP.",
+  scope: "You see the bomb's internal wiring only - no colours or textures. You are muted; listen in and help MUTE "
     + "(a shared drawing canvas is planned for a later update).",
   dispatch: "You see the big picture only - timer, strikes, and alarms - never any module detail. Call out what you see to BLIND.",
 };
@@ -64,9 +66,20 @@ export function renderRoster(el, roster) {
   if (!el || !roster) return;
   el.innerHTML = roster.map(r => {
     const state = !r.connected ? "off" : (r.ready ? "ready" : "on");
-    const mark = !r.connected ? "\u2013" : (r.ready ? "\u2713" : "\u25CB");
-    return '<span class="roster-item roster-' + state + '">' + mark + ' ' + (DISPLAY_NAME[r.role] || r.role.toUpperCase()) + '</span>';
-  }).join(" ");
+    const opt = r.required ? "" : " roster-optional";
+    const tip = !r.connected ? "not here yet" : (r.ready ? "ready" : "connected");
+    return '<span class="roster-item roster-' + state + opt + '" title="' + tip + '">' +
+      (DISPLAY_NAME[r.role] || r.role.toUpperCase()) + '</span>';
+  }).join("");
+}
+
+// The same chips during a round, when the lobby roster is no longer
+// rebroadcast: presence still carries `connected` for every seat (to every
+// role, BLIND included - it's in the matrix's always-shared row).
+export function rosterFromPresence(presence) {
+  return ((presence && presence.players) || []).map(p => ({
+    role: p.role, connected: !!p.connected, ready: false, required: REQUIRED_ROLES.includes(p.role),
+  }));
 }
 
 // Text for the "PAUSED" banner (T13: disconnecting a required role mid-match

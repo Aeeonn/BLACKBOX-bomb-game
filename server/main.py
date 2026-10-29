@@ -43,7 +43,8 @@ async def manual(code: str):
         return HTMLResponse("<p>No armed bomb in this room yet.</p>")
     css = (CLIENT / "common" / "manual.css").read_text(encoding="utf-8")
     return HTMLResponse(
-        "<!doctype html><meta charset='utf-8'><title>Manual %s</title><style>%s</style>"
+        "<!doctype html><meta charset='utf-8'><title>Manual %s</title>"
+        "<link rel='icon' href='/common/icon.svg'><style>%s</style>"
         "<h1>Defusal Manual</h1><p class='seed'>Room %s / seed %d</p>%s"
         "<div class='print-footer'>Room %s &middot; Seed %d</div>"
         % (code.upper(), css, code.upper(), room.bomb.seed, room.bomb.manual_html(),

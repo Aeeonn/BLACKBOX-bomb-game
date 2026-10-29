@@ -19,15 +19,21 @@ function ensure() {
 // "paused" flag and roster.js's pauseText(presence) to also show a full,
 // unmissable dim screen while a required role is disconnected (previously
 // this was only a small line of amber HUD text, easy to miss if you'd
-// alt-tabbed). Omitting them (as scope.html/dispatch.html currently do)
-// simply means this page keeps its old behaviour - win/lose only, no pause
-// overlay - so those pages needed zero changes to keep working exactly as
-// before.
+// alt-tabbed). Every page now passes them via client/common/chrome.js.
+//
+// Called on every 10Hz state tick, so the DOM is only rebuilt when what the
+// overlay shows actually changes - rebuilding each tick would restart its
+// entrance animation ten times a second.
+let shown = null;
 export function updateOverlay(phase, onRearm, paused, pauseLabel) {
   const node = ensure();
+  const key = paused ? "paused|" + pauseLabel : phase + "|" + !!onRearm;
+  if (key === shown) return;
+  shown = key;
   if (paused) {
     node.className = "overlay show paused";
-    node.innerHTML = "<div class='overlay-label paused-label'>" + (pauseLabel || "PAUSED") + "</div>";
+    node.innerHTML = "<div class='overlay-label paused-label'></div>";
+    node.firstChild.textContent = pauseLabel || "PAUSED";
     return;
   }
   if (phase !== "won" && phase !== "lost") {
@@ -38,7 +44,8 @@ export function updateOverlay(phase, onRearm, paused, pauseLabel) {
   node.className = "overlay show " + phase;
   const label = phase === "won" ? "DEFUSED" : "DETONATED";
   node.innerHTML = "<div class='overlay-label'>" + label + "</div>" +
-    (onRearm ? "<button class='rearm'>REARM</button>" : "");
+    (onRearm ? "<button class='rearm btn-primary'>REARM</button>"
+      : "<div class='overlay-sub'>WAITING FOR MUTE TO REARM</div>");
   if (onRearm) {
     node.querySelector(".rearm").onclick = onRearm;
   }

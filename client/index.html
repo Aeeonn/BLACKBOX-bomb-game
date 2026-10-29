@@ -1,65 +1,131 @@
 <!doctype html>
-<meta charset="utf-8"><title>BLACKBOX</title>
+<html lang="en">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>BLACKBOX</title>
+<link rel="icon" href="/common/icon.svg">
 <link rel="stylesheet" href="/common/ui.css">
-<h1>B L A C K B O X</h1>
-<p id="status">lobby</p>
-<button id="make">CREATE ROOM</button>
-<div style="margin-top:16px">
-  <input id="code" placeholder="ROOM" maxlength="4" style="text-transform:uppercase;background:#191919;color:#e8e4d8;border:1px solid #444;padding:10px;width:120px">
-  <button id="go">OPEN LINKS</button>
-</div>
-<div id="links" style="margin-top:20px;line-height:2"></div>
+<body>
+<main class="lobby">
+  <section class="hero">
+    <h1>BLACK<span>BOX</span></h1>
+    <p>One bomb. Three players around one table. BLIND can touch it but can't see it, DEAF can see it but can't hear,
+      and MUTE knows the answer but can't say it. Voice runs on Discord.</p>
+    <div class="ring">
+      <b style="background:var(--c-blind)">BLIND</b> voice &rarr;
+      <b style="background:var(--c-mute)">MUTE</b> cards &amp; nods &rarr;
+      <b style="background:var(--c-deaf)">DEAF</b> voice &rarr;
+      <b style="background:var(--c-blind)">BLIND</b>
+    </div>
+    <div class="join">
+      <button class="btn-primary" id="make">CREATE A ROOM</button>
+      <span class="or">or join</span>
+      <input id="code" placeholder="CODE" maxlength="4" autocomplete="off" spellcheck="false" aria-label="Room code">
+      <button id="go">OPEN</button>
+    </div>
+    <div class="error-line" id="err"></div>
+  </section>
+  <section id="room" hidden>
+    <div class="room-head">
+      <h2>ROOM</h2><span class="code" id="roomcode"></span>
+      <button class="btn-quiet" id="copyAll">COPY ALL LINKS</button>
+      <span class="note">Send each friend their seat's link.</span>
+    </div>
+    <div class="role-cards" id="cards"></div>
+    <div class="lobby-foot">
+      <a id="manualLink" target="_blank" rel="noopener">The manual (MUTE reads this in-game) &#8599;</a>
+      <span>Optional seats can stay empty. MUTE arms the bomb once BLIND, DEAF and MUTE are in.</span>
+    </div>
+  </section>
+</main>
 <script type="module">
 import { DISPLAY_NAME } from "/common/roster.js";
-const roles = ["blind", "deaf", "mute", "scope", "dispatch"];
-const REQUIRED = new Set(["blind", "deaf", "mute"]);
+const SEATS = [
+  { role: "blind", required: true, discord: "Voice on", what: "The only one who can touch the bomb. Feels each part, describes it, holds to act." },
+  { role: "deaf", required: true, discord: "Deafened", what: "Sees every colour, number and light - but hears nothing. Talks to BLIND." },
+  { role: "mute", required: true, discord: "Muted", what: "Hears everyone and holds the manual. Can only nod, shake, point and flash cards." },
+  { role: "scope", required: false, discord: "Muted", what: "Sees the internal wiring only. Listens in." },
+  { role: "dispatch", required: false, discord: "Voice on", what: "Sees the timer, strikes and alarms - nothing inside. Talks to BLIND." },
+];
+const $ = id => document.getElementById(id);
+const seatUrl = (code, role) => location.origin + "/" + role + ".html?room=" + code + "&role=" + role;
+let code = null, pollTimer = null;
 
-// Falls back to an all-disconnected roster before the first poll resolves,
-// so the links still render immediately on click rather than waiting on a
-// round trip.
-function defaultRoster() {
-  return roles.map(r => ({ role: r, connected: false, ready: false, required: REQUIRED.has(r) }));
+async function copy(text, btn) {
+  try { await navigator.clipboard.writeText(text); }
+  catch (e) {
+    // Plain-http LAN hosts have no async clipboard; fall back to a selection.
+    const t = document.createElement("textarea");
+    t.value = text; document.body.appendChild(t); t.select(); document.execCommand("copy"); t.remove();
+  }
+  const was = btn.textContent;
+  btn.textContent = "COPIED \u2713";
+  setTimeout(() => { btn.textContent = was; }, 1200);
 }
 
-function render(code, roster) {
-  const list = roster || defaultRoster();
-  document.getElementById("links").innerHTML =
-    "<b>Room " + code + "</b><br>" +
-    list.map(r => {
-      const cls = "role-link" + (r.connected ? " taken" : "");
-      const mark = !r.connected ? "" : (r.ready ? " \u2713" : " \u25CB");
-      const req = r.required ? "" : " (optional)";
-      return '<a class="' + cls + '" href="/' + r.role + '.html?room=' + code + '&role=' + r.role + '" target="_blank">' +
-        (DISPLAY_NAME[r.role] || r.role.toUpperCase()) + req + mark + '</a>';
-    }).join("<br>") +
-    '<br><a style="color:#e8e4d8" href="/manual/' + code + '" target="_blank">MANUAL (' + DISPLAY_NAME.mute + ' prints this)</a>';
+function buildCards() {
+  $("cards").innerHTML = "";
+  for (const s of SEATS) {
+    const card = document.createElement("div");
+    card.className = "role-card";
+    card.style.setProperty("--c", "var(--c-" + s.role + ")");
+    card.innerHTML = '<span class="tag">' + (s.required ? "REQUIRED" : "OPTIONAL") + "</span><h3>" + DISPLAY_NAME[s.role] + "</h3>" +
+      '<div class="discord">Discord: <b>' + s.discord + '</b></div><div class="what">' + s.what + "</div>" +
+      '<div class="state open">\u25CB OPEN</div><div class="row"><a class="btn btn-primary" target="_blank" rel="noopener">TAKE SEAT</a>' +
+      '<button class="btn-quiet">COPY LINK</button></div>';
+    card.querySelector("a").href = seatUrl(code, s.role);
+    card.querySelector("button").onclick = e => copy(seatUrl(code, s.role), e.currentTarget);
+    card.dataset.role = s.role;
+    $("cards").appendChild(card);
+  }
 }
 
-// T13: polls the roster metadata endpoint (never bomb state - see
-// server/room.py's roster()) so the host can watch friends' links go from
-// plain to "taken" as they connect, without this page opening a websocket
-// of its own.
-let pollTimer = null;
-function startPolling(code) {
-  if (pollTimer) clearInterval(pollTimer);
-  pollTimer = setInterval(async () => {
-    try {
-      const r = await fetch("/api/room/" + code);
-      const j = await r.json();
-      if (!j.error) render(code, j.roster);
-    } catch (e) { /* transient network hiccup - next poll will retry */ }
-  }, 1500);
+// T13: roster metadata only (never bomb state), polled so the host can
+// watch seats fill without this page holding a websocket of its own.
+function paintRoster(roster) {
+  for (const r of roster) {
+    const card = $("cards").querySelector('[data-role="' + r.role + '"]');
+    if (!card) continue;
+    const st = card.querySelector(".state");
+    st.className = "state " + (!r.connected ? "open" : r.ready ? "ready" : "taken");
+    st.textContent = !r.connected ? "\u25CB OPEN" : r.ready ? "\u2713 READY" : "\u25CF TAKEN";
+    card.classList.toggle("taken", r.connected);
+    const link = card.querySelector("a");
+    link.textContent = r.connected ? "TAKEN" : "TAKE SEAT";
+    link.classList.toggle("btn-primary", !r.connected);
+    link.classList.toggle("btn-quiet", r.connected);
+  }
 }
 
-document.getElementById("make").onclick = async () => {
+async function poll() {
+  try {
+    const j = await (await fetch("/api/room/" + code)).json();
+    if (j.error) { $("err").textContent = "No room " + code + " on this server."; return; }
+    $("err").textContent = "";
+    paintRoster(j.roster);
+  } catch (e) { /* transient hiccup - the next poll retries */ }
+}
+
+function open(c) {
+  code = c.toUpperCase();
+  if (!/^[A-Z]{4}$/.test(code)) { $("err").textContent = "Room codes are four letters."; return; }
+  history.replaceState(null, "", "#" + code);
+  $("roomcode").textContent = code;
+  $("manualLink").href = "/manual/" + code;
+  $("room").hidden = false;
+  buildCards();
+  clearInterval(pollTimer);
+  poll();
+  pollTimer = setInterval(poll, 1500);
+}
+
+$("make").onclick = async () => {
   const j = await (await fetch("/api/room", { method: "POST" })).json();
-  document.getElementById("code").value = j.room;
-  render(j.room);
-  startPolling(j.room);
+  $("code").value = j.room;
+  open(j.room);
 };
-document.getElementById("go").onclick = () => {
-  const code = document.getElementById("code").value.toUpperCase();
-  render(code);
-  startPolling(code);
-};
+$("go").onclick = () => open($("code").value);
+$("code").addEventListener("keydown", e => { if (e.key === "Enter") open($("code").value); });
+$("copyAll").onclick = e => copy(SEATS.map(s => DISPLAY_NAME[s.role] + ": " + seatUrl(code, s.role)).join("\n"), e.currentTarget);
+if (location.hash.length === 5) { $("code").value = location.hash.slice(1); open(location.hash.slice(1)); }
 </script>

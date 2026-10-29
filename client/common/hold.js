@@ -43,3 +43,36 @@ export function makeHold({ onStart, onCancel, onCommit }) {
     },
   };
 }
+
+// On-screen hold buttons bound to one controller: pressing starts the hold
+// via start(cfg) (the page decides whether a hold is allowed and what it
+// targets), releasing or leaving the button cancels it, and each button's
+// fill follows the shared hold however it was started - keyboard included.
+// Returns show(cfgs), which rebuilds only when handed a different list:
+// rebuilding mid-hold would cancel the hold.
+export function holdButtons(box, hold, start) {
+  let shown = null;
+  (function animate() {
+    const a = hold.active;
+    for (const btn of box.children) {
+      btn.querySelector(".fill").style.width = (a && a.cfg === btn._cfg ? hold.progress() * 100 : 0) + "%";
+    }
+    requestAnimationFrame(animate);
+  })();
+  return function show(cfgs) {
+    if (cfgs === shown) return;
+    shown = cfgs;
+    box.innerHTML = "";
+    for (const cfg of cfgs) {
+      const btn = document.createElement("button");
+      btn.className = "holdbtn";
+      btn._cfg = cfg;
+      btn.innerHTML = "<kbd>" + cfg.key.toUpperCase() + '</kbd><span class="label">' + cfg.label + '</span><span class="fill"></span>';
+      btn.addEventListener("pointerdown", () => start(cfg));
+      for (const ev of ["pointerup", "pointerleave", "pointercancel"]) {
+        btn.addEventListener(ev, () => { if (hold.active && hold.active.cfg === cfg) hold.cancel(); });
+      }
+      box.appendChild(btn);
+    }
+  };
+}

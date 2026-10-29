@@ -9,8 +9,15 @@
 // calls paint(el, slot, index) for each so the caller can fill in whatever
 // that role is allowed to see. Safe to call every state update - it reuses
 // existing elements by slot index rather than rebuilding the DOM each time.
+//
+// Also publishes the layout's grid size (--cols/--rows) for sizing, and each
+// slot's WORLD kind as data-slot, so even a featureless shell can show a
+// slot's shape (a wire groove, a tile, a vent) - shape is geometry, shared
+// by every role; nothing here is a property.
 export function renderBombFace(container, layout, paint) {
   const slots = (layout && layout.slots) || [];
+  container.style.setProperty("--cols", (layout && layout.w) || 1);
+  container.style.setProperty("--rows", (layout && layout.h) || 1);
   while (container.children.length > slots.length) {
     container.removeChild(container.lastChild);
   }
@@ -23,6 +30,7 @@ export function renderBombFace(container, layout, paint) {
     const el = container.children[i];
     el.style.left = (slot.x * 100) + "%";
     el.style.top = (slot.y * 100) + "%";
+    el.dataset.slot = slot.kind;
     paint(el, slot, i);
   });
 }

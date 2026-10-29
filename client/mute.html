@@ -1,149 +1,138 @@
 <!doctype html>
-<meta charset="utf-8"><title>MUTE</title>
+<html lang="en">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>MUTE &middot; BLACKBOX</title>
+<link rel="icon" href="/common/icon.svg">
 <link rel="stylesheet" href="/common/ui.css">
-<h1>M U T E</h1><p id="status"></p>
-<p class="comms-card" id="comms"></p>
-<button class="help-toggle" id="helpToggle">? How do I play this role</button>
-<div class="help-panel" id="helpPanel" hidden></div>
-<div class="roster" id="roster"></div>
-<button class="readybtn" id="ready">I'M READY</button>
-<div class="stagewrap"><canvas id="stage" width="900" height="320"></canvas></div>
-<div class="hud"><div id="time">--:--</div><div class="strikes" id="strikes"></div><div id="phase"></div></div>
-<p style="color:#6b6b6b;font-size:13px">You are MUTED in Discord. Nod, wave, and use the cards. 2s cooldown.</p>
-<div class="cards" id="cards"></div>
-<div id="bombfaces"></div>
-<p style="margin-top:14px"><button id="start" disabled>ARM THE BOMB</button>
-  <a id="manual" style="color:#e8e4d8;margin-left:14px" target="_blank">OPEN MANUAL</a></p>
-<iframe id="frame" style="width:100%;height:60vh;margin-top:12px;background:#fdfaf2;border:1px solid #444"></iframe>
-<div id="log"></div>
+<body data-role="mute">
+<header class="topbar" id="topbar"></header>
+<main class="game">
+  <section class="room-col">
+    <div class="hud" id="hud"></div>
+    <div class="stage-frame"><canvas id="stage"></canvas></div>
+    <div class="panel">
+      <div class="panel-title">FLASHCARDS <small>shown full-screen to DEAF only &middot; one every 2 seconds</small></div>
+      <div class="cards" id="cards"></div>
+      <div class="cooldown" id="cooldown"><i></i></div>
+      <div class="sent-line" id="sentline"></div>
+    </div>
+    <div class="panel">
+      <div class="panel-title">THE BOMB <small>click a module to point at it for everyone</small></div>
+      <div class="shells" id="bombfaces"><span class="chip muted">Arm the bomb to see its modules.</span></div>
+    </div>
+    <div class="brief" id="brief"></div>
+    <div class="log" id="log"></div>
+  </section>
+  <section class="console sticky">
+    <div class="panel armbar">
+      <button class="btn-primary" id="start" disabled>ARM THE BOMB</button>
+      <span class="seg" id="count" title="Modules on the bomb - more is harder"></span>
+      <a class="btn btn-quiet" id="manual" target="_blank" rel="noopener">PRINT MANUAL &#8599;</a>
+    </div>
+    <iframe class="manual-frame" id="frame" title="Defusal manual" hidden></iframe>
+    <div class="manual-empty" id="nomanual">The manual is generated when the bomb is armed.<br>Only you can see it - read it, then signal.</div>
+  </section>
+</main>
 <script type="module">
-import { connect, on, send, logLine, fmtTime, ROOM, ROLE } from "/common/net.js";
-import { updateOverlay } from "/common/overlay.js";
-import { updateTimerAudio } from "/common/timer-audio.js";
-import { updateFeedback } from "/common/feedback.js";
-import { init as initStage, setPresence, setBomb, findPlayer } from "/common/stage.js";
-import { renderBombFace, paintCharge } from "/common/bombface.js";
-import { COMMS, HELP, renderRoster, coreConnected, pauseText, DISPLAY_NAME } from "/common/roster.js";
-document.getElementById("comms").textContent = COMMS[ROLE];
-document.getElementById("helpPanel").textContent = HELP[ROLE];
-document.getElementById("helpToggle").onclick = () => {
-  const panel = document.getElementById("helpPanel");
-  panel.hidden = !panel.hidden;
-};
-const CARDS = ["STOP","GO","YES","NO","WAIT","AGAIN","1","2","3","4","LEFT","RIGHT"];
+import { connect, on, send, ROOM } from "/common/net.js";
+import { initChrome, getPresence } from "/common/chrome.js";
+import { findPlayer } from "/common/stage.js";
+import { renderShells } from "/common/skins.js";
+import { coreConnected, DISPLAY_NAME } from "/common/roster.js";
+
+const $ = id => document.getElementById(id);
+let state = null, lobbyRoster = null;
+let modules = Number(localStorage.getItem("blackbox.modules")) || 2;
+
+// Shared by ARM and the overlay's REARM - the server always builds a fresh
+// Bomb here and ignores this while a round is still running.
+const arm = () => send({ type: "start", modules, seconds: 300 });
+initChrome({ onRearm: arm });
+
+// Card, key, key label. SPACE is STOP: the one card that has to land inside
+// BLIND's one-second hold.
+const CARDS = [["STOP", " ", "SPACE"], ["GO", "g"], ["YES", "y"], ["NO", "n"], ["WAIT", "w"], ["AGAIN", "a"],
+  ["1", "1"], ["2", "2"], ["3", "3"], ["4", "4"], ["LEFT", "ArrowLeft", "\u2190"], ["RIGHT", "ArrowRight", "\u2192"]];
 let cooling = false;
-const wrap = document.getElementById("cards");
-CARDS.forEach(c => {
+const flash = card => { if (!cooling) send({ type: "flash", card }); };
+for (const [card, key, label] of CARDS) {
   const b = document.createElement("button");
-  b.textContent = c;
-  b.onclick = () => { if (!cooling) send({ type: "flash", card: c }); };
-  wrap.appendChild(b);
+  b.className = "card-btn" + (card === "STOP" ? " stop" : "");
+  b.dataset.card = card;
+  b.innerHTML = "<kbd>" + (label || key.toUpperCase()) + "</kbd>" + card;
+  b.addEventListener("mousedown", e => e.preventDefault());   // keep focus off, so SPACE stays STOP
+  b.onclick = () => flash(card);
+  $("cards").appendChild(b);
+}
+addEventListener("keydown", e => {
+  if (e.repeat || e.ctrlKey || e.metaKey || e.altKey || e.target.closest("input, select, textarea, button, a")) return;
+  const hit = CARDS.find(([, key]) => key === e.key || key === e.key.toLowerCase());
+  if (hit) { e.preventDefault(); flash(hit[0]); }
 });
+// A mouse-clicked button keeps focus and would swallow SPACE; hand focus
+// back to the page so SPACE always means STOP. (detail is 0 for keyboard
+// activation, which keeps its focus.)
+addEventListener("click", e => { const b = e.target.closest("button"); if (b && e.detail > 0) b.blur(); });
 // The server owns the cooldown and silently drops an early flash, so the
-// board only greys out once a flash is confirmed sent - a dropped click no
-// longer looks like it reached DEAF.
-on("flash_ok", () => {
-  cooling = true; wrap.style.opacity = .35;
-  setTimeout(() => { cooling = false; wrap.style.opacity = 1; }, 2000);
+// board only cools down once a flash is confirmed sent.
+on("flash_ok", m => {
+  cooling = true;
+  $("cards").classList.add("cooling");
+  const bar = $("cooldown");
+  bar.classList.remove("run"); void bar.offsetWidth; bar.classList.add("run");
+  const btn = $("cards").querySelector('[data-card="' + m.card + '"]');
+  if (btn) { btn.classList.remove("sent"); void btn.offsetWidth; btn.classList.add("sent"); }
+  $("sentline").innerHTML = "You flashed <b></b> to " + DISPLAY_NAME.deaf + ".";
+  $("sentline").querySelector("b").textContent = m.card;
+  setTimeout(() => { cooling = false; $("cards").classList.remove("cooling"); }, 2000);
 });
-document.getElementById("manual").href = "/manual/" + ROOM;
-// Shared by the initial ARM button and the overlay's REARM button - the
-// server always builds a fresh Bomb here, and ignores this while a round
-// is still running, so it's safe to wire to both.
-function arm() {
-  send({ type: "start", modules: 2, seconds: 300 });
-  setTimeout(() => { document.getElementById("frame").src = "/manual/" + ROOM; }, 400);
+
+// Difficulty is module count (AGENTS.md), never a shorter timer.
+$("count").innerHTML = '<span class="seg-label">MODULES</span>';
+for (const n of [1, 2, 3, 4]) {
+  const b = document.createElement("button");
+  b.textContent = n;
+  b.onclick = () => { modules = n; localStorage.setItem("blackbox.modules", n); paintCount(); };
+  $("count").appendChild(b);
 }
-document.getElementById("start").onclick = arm;
+const paintCount = () => [...$("count").querySelectorAll("button")].forEach((b, i) => b.classList.toggle("on", i + 1 === modules));
+paintCount();
+$("start").onclick = arm;
+$("manual").href = "/manual/" + ROOM;
 
-// T13: ARM stays disabled - client-side only, the server still accepts a
-// start() from anyone - until the roster shows all three core roles
-// connected. This is a UI convenience, not the anti-leak boundary, so it's
-// fine for it to live here instead of in server/room.py.
-function updateLobby(m) {
-  renderRoster(document.getElementById("roster"), m.roster);
-  const btn = document.getElementById("start");
-  const ok = coreConnected(m.roster);
-  btn.disabled = !ok;
-  btn.title = ok ? "" : "Waiting for " + DISPLAY_NAME.blind + ", " + DISPLAY_NAME.deaf + " and " + DISPLAY_NAME.mute + " to connect";
+// ARM needs the three core seats (a UI convenience - the server is the
+// authority) and no round in progress.
+function paintArm() {
+  const running = state && state.phase === "running";
+  const ready = state ? !running : coreConnected(lobbyRoster);
+  $("start").disabled = !ready;
+  $("start").textContent = running ? "ROUND IN PROGRESS" : state ? "REARM" : "ARM THE BOMB";
+  $("start").title = ready ? "" : running ? "" : "Waiting for BLIND, DEAF and MUTE to connect";
 }
-on("lobby", updateLobby);
+on("lobby", m => { lobbyRoster = m.roster; paintArm(); });
 
-let isReady = false;
-const readyBtn = document.getElementById("ready");
-readyBtn.onclick = () => {
-  isReady = !isReady;
-  send({ type: "ready", value: isReady });
-  readyBtn.classList.toggle("is-ready", isReady);
-  readyBtn.textContent = isReady ? "\u2713 READY" : "I'M READY";
-};
+let manualFor = null;
+function loadManual(force) {
+  if (!force && manualFor === ROOM) return;
+  manualFor = ROOM;
+  $("frame").src = "/manual/" + ROOM + "?t=" + Date.now();
+  $("frame").hidden = false;
+  $("nomanual").hidden = true;
+}
+on("log", m => { if (/^Bomb armed/.test(m.text)) loadManual(true); });
 
-let lastPayload = null, presence = null;
-initStage(document.getElementById("stage"), ROLE, send);
-on("presence", m => { presence = m.payload; setPresence(m.payload); if (lastPayload) drawMuteShells(lastPayload); });
+// MUTE's own views() carry no per-slot data, so the shells are indices only.
+const drawShells = () => { if (state) renderShells($("bombfaces"), state, getPresence(), { onPoint: sendPoint }); };
+on("state", m => { state = m.payload; paintArm(); loadManual(false); drawShells(); });
+on("presence", drawShells);
 
-// MUTE's shell: slot indices only, no colour or texture - MUTE's own views()
-// never carries per-slot data in the first place, so there is nothing here
-// that could leak. Reuses one .bombface-wrap per module across updates
-// rather than rebuilding the DOM every state tick.
-//
-// T12: clicking a module's shell points at it (module-level only - the
-// server drops any cell we send unless precise_pointing is on, which
-// nothing enables yet), so we don't pretend to track a cell locally either.
-// Clicking the module MUTE is already pointing at again clears it.
+// T12: pointing is module-level only (the server drops any cell unless
+// precise_pointing is on); clicking the pointed module again clears it.
 function sendPoint(i) {
-  const bp = findPlayer(presence, "mute");
-  const already = bp && bp.pointer && bp.pointer.module === i;
-  send({ type: "point", target: already ? {} : { module: i } });
+  const me = findPlayer(getPresence(), "mute");
+  send({ type: "point", target: me && me.pointer && me.pointer.module === i ? {} : { module: i } });
 }
 
-function drawMuteShells(payload) {
-  const layouts = payload.layouts || [];
-  const container = document.getElementById("bombfaces");
-  while (container.children.length > layouts.length) {
-    container.removeChild(container.lastChild);
-  }
-  const hp = findPlayer(presence, "blind");
-  const probe = hp && hp.probe;
-  const charge = hp && hp.charge;
-  const bp = findPlayer(presence, "mute");
-  const pointedModule = bp && bp.pointer ? bp.pointer.module : null;
-  layouts.forEach((layout, i) => {
-    let box = container.children[i];
-    if (!box) {
-      box = document.createElement("div");
-      box.className = "bombface-wrap pointable";
-      box.innerHTML = '<div class="bombface-label"></div><div class="bombface"></div>';
-      box.onclick = () => sendPoint(i);
-      container.appendChild(box);
-    }
-    box.classList.toggle("pointed", i === pointedModule);
-    const mv = payload.modules[i] || {};
-    box.querySelector(".bombface-label").textContent =
-      "Module " + (i + 1) + (mv.module ? " - " + mv.module : "") + (mv.solved ? " (solved)" : "");
-    renderBombFace(box.querySelector(".bombface"), layout, (el, slot, idx) => {
-      const isProbed = probe && probe.module === i && probe.cell === idx;
-      const isCharging = charge && charge.module === i && charge.cell === idx;
-      el.className = "slot" + (isProbed ? " probed" : "") + (isCharging ? " charging" : "");
-      el.textContent = String(idx + 1);
-      paintCharge(el, isCharging ? charge.progress : null);
-    });
-  });
-}
-
-on("state", s => {
-  document.getElementById("time").textContent = fmtTime(s.payload.time_left);
-  document.getElementById("strikes").textContent = "X".repeat(s.payload.strikes);
-  const p = document.getElementById("phase");
-  if (s.payload.paused) { p.textContent = pauseText(presence); p.className = "paused"; }
-  else { p.textContent = s.payload.phase === "running" ? "" : s.payload.phase.toUpperCase(); p.className = s.payload.phase; }
-  updateOverlay(s.payload.phase, arm, s.payload.paused, pauseText(presence));
-  updateTimerAudio(s.payload.time_left, s.payload.phase);
-  updateFeedback(s.payload.strikes, s.payload.modules.filter(mv => mv.solved).length, s.payload.phase);
-  setBomb(s.payload);
-  lastPayload = s.payload;
-  drawMuteShells(s.payload);
-});
-on("log", m => logLine(m.text));
 connect();
 </script>

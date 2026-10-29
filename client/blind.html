@@ -1,49 +1,68 @@
 <!doctype html>
-<meta charset="utf-8"><title>BLIND</title>
+<html lang="en">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>BLIND &middot; BLACKBOX</title>
+<link rel="icon" href="/common/icon.svg">
 <link rel="stylesheet" href="/common/ui.css">
-<h1>B L I N D</h1><p id="status"></p>
-<p class="comms-card" id="comms"></p>
-<button class="help-toggle" id="helpToggle">? How do I play this role</button>
-<div class="help-panel" id="helpPanel" hidden></div>
-<div class="roster" id="roster"></div>
-<button class="readybtn" id="ready">I'M READY</button>
-<div class="stagewrap"><canvas id="stage" width="900" height="320"></canvas></div>
-<div class="flags" id="flags"></div>
-<div class="hud"><div id="time">--:--</div><div class="strikes" id="strikes"></div><div id="phase"></div></div>
-<p style="color:#6b6b6b;font-size:13px">ARROWS move the probe &middot; TAB switches module &middot; hold the button shown below (or its key) to act</p>
-<div class="bombface" id="grid"></div>
-<div class="readout" id="readout">probe idle</div>
-<div id="actionbtns" style="margin-top:12px"></div>
-<div id="log"></div>
+<body data-role="blind">
+<header class="topbar" id="topbar"></header>
+<main class="game">
+  <section class="room-col">
+    <div class="hud" id="hud"></div>
+    <div class="stage-frame"><canvas id="stage"></canvas></div>
+    <div class="brief" id="brief"></div>
+    <div class="log" id="log"></div>
+  </section>
+  <section class="console">
+    <div class="panel">
+      <div class="panel-title">THE CASING <small>what your hands tell you about the whole bomb</small></div>
+      <div class="chips" id="flags"><span class="chip muted">Nothing to feel until the bomb is armed.</span></div>
+    </div>
+    <div class="panel">
+      <div class="tabs" id="tabs"></div>
+      <div class="bombface tactile" id="grid"></div>
+      <div class="readout"><span class="readout-label">FINGERTIP</span><span class="readout-text idle" id="readout">Touch a cell to feel it.</span></div>
+      <div class="actions" id="actionbtns"></div>
+      <div class="keys"><span><kbd>&larr;</kbd> <kbd>&rarr;</kbd> move</span><span><kbd>TAB</kbd> next module</span><span>hold a key until the bar fills to act</span></div>
+    </div>
+  </section>
+</main>
 <script type="module">
-import { connect, on, send, logLine, fmtTime, ROLE } from "/common/net.js";
-import { makeHold } from "/common/hold.js";
-import { updateOverlay } from "/common/overlay.js";
-import { updateTimerAudio } from "/common/timer-audio.js";
-import { updateFeedback } from "/common/feedback.js";
-import { init as initStage, setPresence, setBomb } from "/common/stage.js";
-import { renderBombFace } from "/common/bombface.js";
-import { COMMS, HELP, renderRoster, pauseText } from "/common/roster.js";
-document.getElementById("comms").textContent = COMMS[ROLE];
-document.getElementById("helpPanel").textContent = HELP[ROLE];
-document.getElementById("helpToggle").onclick = () => {
-  const panel = document.getElementById("helpPanel");
-  panel.hidden = !panel.hidden;
-};
-let mod = 0, cell = 0, state = null, presence = null;
+import { connect, on, send } from "/common/net.js";
+import { initChrome } from "/common/chrome.js";
+import { makeHold, holdButtons } from "/common/hold.js";
+import { renderBombFace, paintCharge } from "/common/bombface.js";
+import { paintTactile, renderTabs, esc } from "/common/skins.js";
 
-on("lobby", m => renderRoster(document.getElementById("roster"), m.roster));
-let isReady = false;
-const readyBtn = document.getElementById("ready");
-readyBtn.onclick = () => {
-  isReady = !isReady;
-  send({ type: "ready", value: isReady });
-  readyBtn.classList.toggle("is-ready", isReady);
-  readyBtn.textContent = isReady ? "\u2713 READY" : "I'M READY";
-};
+initChrome();
+const $ = id => document.getElementById(id);
+let mod = 0, cell = 0, state = null;
 
-initStage(document.getElementById("stage"), ROLE, send);
-on("presence", m => { presence = m.payload; setPresence(m.payload); });
+// Must match server/stage.py's HOLD_DURATIONS_S - the server's ring is the
+// authoritative timing; these only decide when this client sends the act.
+// Every 1-second hold reuses the "cut" charge kind, so the ring's timing is
+// right for all of them.
+const HOLD_MS = { cut: 1000, discharge: 2000 };
+const ACTIONS = {
+  wires: [{ key: "c", action: "cut", chargeKind: "cut", label: "HOLD TO CUT" },
+          { key: "d", action: "discharge", chargeKind: "discharge", label: "HOLD TO DISCHARGE" }],
+  ledger: [{ key: "p", action: "press", chargeKind: "cut", label: "HOLD TO PRESS" },
+           { key: "k", action: "skip", chargeKind: "cut", label: "HOLD TO SKIP" }],
+  vent: [{ key: "v", action: "purge", chargeKind: "cut", label: "HOLD TO PURGE" }],
+  gauge: [{ key: "l", action: "lock", chargeKind: "cut", label: "HOLD TO LOCK IN" }],
+  manifest: [{ key: "p", action: "press", chargeKind: "cut", label: "HOLD TO STAMP" }],
+  static: [{ key: "p", action: "press", chargeKind: "cut", label: "HOLD TO PRESS" }],
+  handshake: [{ key: "h", action: "confirm", chargeKind: "cut", label: "HOLD TO CONFIRM" }],
+};
+for (const list of Object.values(ACTIONS)) for (const cfg of list) cfg.ms = HOLD_MS[cfg.chargeKind];
+
+const currentKind = () => (state && state.modules[mod] && state.modules[mod].kind) || "wires";
+// The shared layout is the one count every module has - views().blind has
+// no "count" for Handshake/Gauge, which used to turn arrows into cell=NaN.
+const slotCount = () => { const l = state && state.layouts && state.layouts[mod]; return l ? l.slots.length : 0; };
+const probe = () => send({ type: "probe", module: mod, cell });
+
 on("state", m => {
   state = m.payload;
   // A REARM can bring a bomb with fewer modules or slots than the last one.
@@ -51,40 +70,17 @@ on("state", m => {
   if (cell >= slotCount()) cell = 0;
   if (state.phase !== "running" || state.paused) hold.cancel();
   draw();
-  updateOverlay(state.phase, undefined, state.paused, pauseText(presence));
-  updateTimerAudio(state.time_left, state.phase);
-  updateFeedback(state.strikes, state.modules.filter(mv => mv.solved).length, state.phase);
-  setBomb(state);
 });
-on("log", m => logLine(m.text));
-on("error", m => logLine("ERROR " + m.text));
 on("probe_result", m => {
-  // T16: Gauge only ever has one "cell" (the knob itself), so "cell 1:
-  // click" would read oddly - a plain "the knob: click" phrasing fits how
-  // a real player would describe turning a single dial. N2's sync port is
-  // the same situation, just with its own noun.
-  const readout = document.getElementById("readout");
-  if (currentKind() === "gauge") {
-    readout.textContent = m.data.text ? ("the knob: " + m.data.text) : "nothing here";
-  } else if (currentKind() === "handshake") {
-    readout.textContent = m.data.text ? ("the port: " + m.data.text) : "nothing here";
-  } else {
-    readout.textContent = m.data.text ? ("cell " + (m.data.cell + 1) + ": " + m.data.text) : "nothing here";
-  }
+  if (m.module !== mod) return;   // a late answer for a module we've left
+  const kind = currentKind(), el = $("readout");
+  const noun = kind === "gauge" ? "the knob" : kind === "handshake" ? "the port" : "cell " + (m.data.cell + 1);
+  el.textContent = m.data.text ? noun + ": " + m.data.text : "nothing here";
+  el.classList.toggle("idle", !m.data.text);
 });
 
-function probe() { send({ type: "probe", module: mod, cell: cell }); }
-
-// The shared layout is the one count every module has - views().blind only
-// carries "count" for some kinds (Handshake and Gauge have none), and a
-// missing count used to turn the arrow keys into cell=NaN.
-function slotCount() {
-  const layout = state && state.layouts && state.layouts[mod];
-  return layout ? layout.slots.length : 0;
-}
-
-// Every way of moving the probe goes through here, so an in-progress hold is
-// always cancelled before its target changes.
+// Every way of moving the probe goes through here, so an in-progress hold
+// is always cancelled before its target changes.
 function moveTo(newMod, newCell) {
   hold.cancel();
   mod = newMod;
@@ -93,101 +89,32 @@ function moveTo(newMod, newCell) {
   probe();
 }
 
-// T14: every module BLIND can act on shows hold-buttons here, but WHAT
-// those buttons do depends on the module - M1's wires want CUT/DISCHARGE,
-// M2's Ledger tiles want PRESS/SKIP. This table is the one place that maps
-// a module's "kind" (from its own views().blind) to the buttons/keys/labels
-// for it, so adding a future module's action pair never means hardcoding a
-// third pair of buttons in the page - just one more entry here.
-//
-// T15: N1 Vent only needs ONE button (PURGE), not two - ensureActionButtons()
-// below just iterates whatever list is here, so a shorter list works with
-// no special-casing.
-//
-// chargeKind reuses "cut" (already a 1-second hold on the server) for
-// Ledger's and Vent's actions rather than asking server/stage.py to learn
-// new hold-kind names - all of these really are 1-second holds, so nothing
-// about the broadcast ring's timing is actually wrong, it just means the
-// ring's internal "kind" label says "cut" even when you're really pressing,
-// skipping, or purging. Nothing ever displays that label as text, only its
-// timing, so this is invisible in play.
-//
-// Polish pass: these durations MUST match server/stage.py's
-// HOLD_DURATIONS_S - that's the ring's true authoritative timing, this copy
-// only decides when THIS client actually fires the real action message.
-// Defining them once here (instead of five separate inline "ms: 1000"
-// literals scattered through ACTIONS below) means there is now exactly one
-// client-side place to update if either duration ever changes, matching
-// there being exactly one server-side place.
-const HOLD_MS = { cut: 1000, discharge: 2000 };
-
-const ACTIONS = {
-  wires: [
-    { key: "c", action: "cut", chargeKind: "cut", label: "HOLD TO CUT", ms: HOLD_MS.cut },
-    { key: "d", action: "discharge", chargeKind: "discharge", label: "HOLD TO DISCHARGE", ms: HOLD_MS.discharge },
-  ],
-  ledger: [
-    { key: "p", action: "press", chargeKind: "cut", label: "HOLD TO PRESS", ms: HOLD_MS.cut },
-    { key: "k", action: "skip", chargeKind: "cut", label: "HOLD TO SKIP", ms: HOLD_MS.cut },
-  ],
-  vent: [
-    { key: "v", action: "purge", chargeKind: "cut", label: "HOLD TO PURGE", ms: HOLD_MS.cut },
-  ],
-  gauge: [
-    { key: "l", action: "lock", chargeKind: "cut", label: "HOLD TO LOCK IN", ms: HOLD_MS.cut },
-  ],
-  manifest: [
-    { key: "p", action: "press", chargeKind: "cut", label: "HOLD TO STAMP", ms: HOLD_MS.cut },
-  ],
-  static: [
-    { key: "p", action: "press", chargeKind: "cut", label: "HOLD TO PRESS", ms: HOLD_MS.cut },
-  ],
-  handshake: [
-    { key: "h", action: "confirm", chargeKind: "cut", label: "HOLD TO CONFIRM", ms: HOLD_MS.cut },
-  ],
-};
-
-function currentKind() {
-  const v = state && state.modules[mod];
-  return (v && v.kind) || "wires";
-}
-
 function draw() {
   const s = state; if (!s) return;
-  document.getElementById("time").textContent = fmtTime(s.time_left);
-  document.getElementById("strikes").textContent = "X".repeat(s.strikes);
-  const ph = document.getElementById("phase");
-  if (s.paused) { ph.textContent = pauseText(presence); ph.className = "paused"; }
-  else { ph.textContent = s.phase === "running" ? "" : s.phase.toUpperCase(); ph.className = s.phase; }
-  document.getElementById("flags").textContent =
-    "casing " + s.flags.casing + " / corner screw " + s.flags.corner_screw + " / " + s.flags.temperature + " to the touch";
-  const v = s.modules[mod] || { count: 0, cut: [], resolved: [] };
-  const layout = (s.layouts && s.layouts[mod]) || { slots: [] };
-  // "cut" (wires), "resolved" (ledger) and "pressed" (manifest/static) all
-  // mean the same thing here: this cell can no longer be acted on. Whichever
-  // array the current module's kind actually sends is the one we read.
-  // Gauge has none of these - its one slot is never "done", just turned and
-  // re-locked.
-  const done = v.kind === "ledger" ? (v.resolved || [])
-    : (v.kind === "manifest" || v.kind === "static") ? (v.pressed || [])
-    : (v.cut || []);
-  renderBombFace(document.getElementById("grid"), layout, (el, slot, i) => {
-    el.className = "slot" + (i === cell ? " sel" : "") + (done[i] ? " cut" : "");
-    el.textContent = v.kind === "gauge" ? "KNOB" : v.kind === "handshake" ? "PORT" : ("[" + (i + 1) + "]");
+  const f = s.flags || {};
+  $("flags").innerHTML = '<span class="chip"><b>' + esc(f.casing) + '</b> casing</span>' +
+    '<span class="chip">corner screw <b>' + esc(f.corner_screw) + '</b></span>' +
+    '<span class="chip"><b>' + esc(f.temperature) + '</b> to the touch</span>';
+  renderTabs($("tabs"), s.modules, mod, { onPick: i => moveTo(i, 0) });
+  const v = s.modules[mod] || {};
+  const grid = $("grid");
+  grid.dataset.kind = v.kind || "";
+  grid.classList.toggle("solved", !!v.solved);
+  renderBombFace(grid, (s.layouts && s.layouts[mod]) || { slots: [] }, (el, slot, i) => {
+    paintTactile(el, v, i);
+    el.classList.toggle("sel", i === cell);
     el.onclick = () => moveTo(mod, i);
   });
-  ensureActionButtons(currentKind());
+  showActions(ACTIONS[currentKind()] || ACTIONS.wires);
 }
 
-// T16: Gauge is the first module where turning is a real state-changing
-// server action (not just moving a local UI cursor between cells like
-// every other module's arrows do) - ArrowLeft/Right send an "act" message
-// with {turn: "ccw"/"cw"} and re-probe the single knob for fresh tactile
-// feedback, rather than changing `cell` (which stays 0 the whole round).
+// T16: on a Gauge the arrows are a real server action (turning the knob),
+// not a local cursor move - the knob is the module's only slot.
 addEventListener("keydown", e => {
   if (!state || !state.modules.length) return;
   if (e.key === "Tab") { e.preventDefault(); moveTo((mod + 1) % state.modules.length, 0); return; }
   if (e.key !== "ArrowRight" && e.key !== "ArrowLeft") return;
+  e.preventDefault();
   if (currentKind() === "gauge") {
     hold.cancel();
     send({ type: "act", module: mod, action: { turn: e.key === "ArrowRight" ? "cw" : "ccw" } });
@@ -198,8 +125,7 @@ addEventListener("keydown", e => {
 });
 
 const hold = makeHold({
-  onStart: h => send({ type: "charge", action: "start", kind: h.cfg.chargeKind,
-                       module: h.target.module, cell: h.target.cell }),
+  onStart: h => send({ type: "charge", action: "start", kind: h.cfg.chargeKind, module: h.target.module, cell: h.target.cell }),
   onCancel: () => send({ type: "charge", action: "stop" }),
   onCommit: h => {
     send({ type: "charge", action: "stop" });
@@ -209,52 +135,28 @@ const hold = makeHold({
 function startHold(cfg) {
   if (state && state.phase === "running" && !state.paused) hold.start(cfg, { module: mod, cell });
 }
-
-// e.repeat is ignored so a key that's still held after its commit can't
-// silently arm and fire a second time - committing again takes a fresh press.
+// e.repeat is ignored so a key still held after its commit can't silently
+// arm and fire again - committing twice takes two presses.
 addEventListener("keydown", e => {
   if (e.repeat) return;
   const cfg = (ACTIONS[currentKind()] || []).find(c => c.key === e.key.toLowerCase());
   if (cfg) startHold(cfg);
 });
-addEventListener("keyup", e => {
-  if (hold.active && hold.active.cfg.key === e.key.toLowerCase()) hold.cancel();
-});
-// A keyup that happens in another window never arrives here, so leaving the
-// page mid-hold cancels it rather than letting it run to a commit.
+addEventListener("keyup", e => { if (hold.active && hold.active.cfg.key === e.key.toLowerCase()) hold.cancel(); });
+// A keyup in another window never arrives here, so leaving mid-hold cancels.
 addEventListener("blur", () => hold.cancel());
 
-// The button fill follows the one shared hold, whether it was started by
-// mouse, touch or keyboard.
-(function animateHold() {
-  for (const btn of document.querySelectorAll("#actionbtns .holdbtn")) {
-    const mine = hold.active && hold.active.cfg === btn._cfg;
-    btn.querySelector(".fill").style.width = (mine ? hold.progress() * 100 : 0) + "%";
-  }
-  requestAnimationFrame(animateHold);
+const showActions = holdButtons($("actionbtns"), hold, startHold);
+// The slot under the fingertip fills too, however the hold was started.
+(function animateSlot() {
+  const a = hold.active;
+  [...$("grid").children].forEach((el, i) => {
+    const mine = !!a && a.target.module === mod && a.target.cell === i;
+    el.classList.toggle("charging", mine);
+    paintCharge(el, mine ? hold.progress() : null);
+  });
+  requestAnimationFrame(animateSlot);
 })();
-
-// Rebuilds the visible hold-buttons only when the selected module's kind
-// actually changes (not on every single state tick) - rebuilding a button
-// mid-hold would cancel the hold and feel broken.
-let renderedKind = null;
-function ensureActionButtons(kind) {
-  if (kind === renderedKind) return;
-  renderedKind = kind;
-  const container = document.getElementById("actionbtns");
-  container.innerHTML = "";
-  for (const cfg of (ACTIONS[kind] || ACTIONS.wires)) {
-    const btn = document.createElement("button");
-    btn.className = "holdbtn";
-    btn._cfg = cfg;
-    btn.innerHTML = cfg.label + '<span class="fill"></span>';
-    btn.addEventListener("pointerdown", () => startHold(cfg));
-    for (const ev of ["pointerup", "pointerleave", "pointercancel"]) {
-      btn.addEventListener(ev, () => { if (hold.active && hold.active.cfg === cfg) hold.cancel(); });
-    }
-    container.appendChild(btn);
-  }
-}
 
 connect();
 </script>

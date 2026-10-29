@@ -1,43 +1,44 @@
 <!doctype html>
-<meta charset="utf-8"><title>DISPATCH</title>
+<html lang="en">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>DISPATCH &middot; BLACKBOX</title>
+<link rel="icon" href="/common/icon.svg">
 <link rel="stylesheet" href="/common/ui.css">
-<h1>D I S P A T C H</h1><p id="status"></p>
-<p class="comms-card" id="comms"></p>
-<div class="roster" id="roster"></div>
-<button class="readybtn" id="ready">I'M READY</button>
-<div class="stagewrap"><canvas id="stage" width="900" height="320"></canvas></div>
-<div class="hud" style="font-size:44px"><div id="time">--:--</div><div class="strikes" id="strikes"></div><div id="phase"></div></div>
-<p style="color:#6b6b6b;font-size:13px">Global layer only. No module contents. Talk to BLIND.</p>
-<div id="log"></div>
+<body data-role="dispatch">
+<header class="topbar" id="topbar"></header>
+<main class="game">
+  <section class="room-col">
+    <div class="hud" id="hud"></div>
+    <div class="stage-frame"><canvas id="stage"></canvas></div>
+    <div class="brief" id="brief"></div>
+    <div class="log" id="log"></div>
+  </section>
+  <section class="console">
+    <div class="panel big-readout">
+      <div class="panel-title">THE GLOBAL LAYER <small>no module contents &middot; talk to BLIND</small></div>
+      <div class="timer idle" id="bigtimer"><span class="ghost">88:88</span><span id="bigtime">--:--</span></div>
+      <div class="chips" id="summary"><span class="chip muted">Waiting for the bomb to be armed.</span></div>
+    </div>
+  </section>
+</main>
 <script type="module">
-import { connect, on, send, logLine, fmtTime, ROLE } from "/common/net.js";
-import { updateOverlay } from "/common/overlay.js";
-import { init as initStage, setPresence, setBomb } from "/common/stage.js";
-import { COMMS, renderRoster, pauseText } from "/common/roster.js";
-document.getElementById("comms").textContent = COMMS[ROLE];
-let presence = null;
+import { connect, on } from "/common/net.js";
+import { initChrome, mmss } from "/common/chrome.js";
 
-on("lobby", m => renderRoster(document.getElementById("roster"), m.roster));
-let isReady = false;
-const readyBtn = document.getElementById("ready");
-readyBtn.onclick = () => {
-  isReady = !isReady;
-  send({ type: "ready", value: isReady });
-  readyBtn.classList.toggle("is-ready", isReady);
-  readyBtn.textContent = isReady ? "\u2713 READY" : "I'M READY";
-};
+initChrome();
+const $ = id => document.getElementById(id);
 
-initStage(document.getElementById("stage"), ROLE, send);
-on("presence", m => { presence = m.payload; setPresence(m.payload); });
-on("log", m => logLine(m.text));
-on("state", s => {
-  document.getElementById("time").textContent = fmtTime(s.payload.time_left);
-  document.getElementById("strikes").textContent = "X".repeat(s.payload.strikes);
-  const ph = document.getElementById("phase");
-  if (s.payload.paused) { ph.textContent = pauseText(presence); ph.className = "paused"; }
-  else { ph.textContent = s.payload.phase === "running" ? "" : s.payload.phase.toUpperCase(); ph.className = s.payload.phase; }
-  updateOverlay(s.payload.phase);
-  setBomb(s.payload);
+// DISPATCH's snapshot carries no module contents at all - only the round's
+// global fields, which every role receives identically.
+on("state", m => {
+  const s = m.payload;
+  $("bigtime").textContent = mmss(s.time_left);
+  $("bigtimer").className = $("timer").className;
+  $("summary").innerHTML = '<span class="chip"><b>' + s.modules.length + "</b> modules armed</span>" +
+    '<span class="chip">strikes <b>' + s.strikes + " / " + s.max_strikes + "</b></span>" +
+    (s.paused ? '<span class="chip"><b>PAUSED</b></span>' : "");
 });
+
 connect();
 </script>
