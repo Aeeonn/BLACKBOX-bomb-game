@@ -39,6 +39,7 @@ import { connect, on, send, ROOM } from "/common/net.js";
 import { initChrome, getPresence } from "/common/chrome.js";
 import { findPlayer } from "/common/stage.js";
 import { renderShells } from "/common/skins.js";
+import { sfx, drone } from "/common/audio.js";
 import { coreConnected, DISPLAY_NAME } from "/common/roster.js";
 
 const $ = id => document.getElementById(id);
@@ -77,6 +78,7 @@ addEventListener("click", e => { const b = e.target.closest("button"); if (b && 
 // The server owns the cooldown and silently drops an early flash, so the
 // board only cools down once a flash is confirmed sent.
 on("flash_ok", m => {
+  sfx.flash();
   cooling = true;
   $("cards").classList.add("cooling");
   const bar = $("cooldown");
@@ -126,6 +128,20 @@ on("log", m => { if (/^Bomb armed/.test(m.text)) loadManual(true); });
 const drawShells = () => { if (state) renderShells($("bombfaces"), state, getPresence(), { onPoint: sendPoint }); };
 on("state", m => { state = m.payload; paintArm(); loadManual(false); drawShells(); });
 on("presence", drawShells);
+
+// MUTE hears BLIND's hold charging. The ring is PRESENCE every role sees,
+// but MUTE is often heads-down in the manual when a hold starts - and MUTE
+// is the one who has to slam STOP inside it.
+let whine = null, whineGuard = null;
+on("presence", () => {
+  const blind = findPlayer(getPresence(), "blind"), c = blind && blind.charge;
+  if (c && !whine) whine = drone({ type: "sawtooth", gain: 0.018 });
+  if (!c && whine) { whine.stop(); whine = null; }
+  if (whine) whine.pitch(260 + 520 * c.progress);
+  // Presence arrives at 20Hz; if it stops (a dropped connection), so does the whine.
+  clearTimeout(whineGuard);
+  if (whine) whineGuard = setTimeout(() => { if (whine) { whine.stop(); whine = null; } }, 400);
+});
 
 // T12: pointing is module-level only (the server drops any cell unless
 // precise_pointing is on); clicking the pointed module again clears it.

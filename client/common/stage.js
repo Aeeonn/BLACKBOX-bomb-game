@@ -227,6 +227,7 @@ export function setPresence(payload) {
 // role-filtered view - is dropped here, so this file physically cannot grow
 // a dependency on PERCEPTION later by accident.
 export function setBomb(snapshot) {
+  const prev = bomb;
   bomb = {
     phase: snapshot.phase || "running",
     layouts: snapshot.layouts || [],
@@ -235,6 +236,15 @@ export function setBomb(snapshot) {
     maxStrikes: snapshot.max_strikes || 3,
     paused: !!snapshot.paused,
   };
+  // The room jolts on a strike and quakes on detonation. Only live
+  // transitions count, so loading the page mid-round never shakes it.
+  if (prev.phase === "running" && bomb.phase === "lost") kick(1300, 0.45);
+  else if (prev.phase === "running" && bomb.phase === "running" && bomb.strikes > prev.strikes) kick(450, 0.16);
+}
+
+let shake = { until: 0, ms: 1, amp: 0 };
+function kick(ms, amp) {
+  shake = { until: performance.now() + ms, ms, amp };
 }
 
 function tick(ts) {
@@ -329,8 +339,11 @@ function fit() {
 function frame() {
   const w = viewW, h = viewH;
   const u = Math.min(w / 16, h / 9);
-  const back = { x: -parallax.x * 0.16 * u, y: -parallax.y * 0.1 * u };
-  const front = { x: -parallax.x * 0.32 * u, y: -parallax.y * 0.18 * u };
+  const now = performance.now();
+  const jolt = now < shake.until ? shake.amp * u * ((shake.until - now) / shake.ms) : 0;
+  const jx = (Math.random() * 2 - 1) * jolt, jy = (Math.random() * 2 - 1) * jolt;
+  const back = { x: -parallax.x * 0.16 * u + jx * 0.6, y: -parallax.y * 0.1 * u + jy * 0.6 };
+  const front = { x: -parallax.x * 0.32 * u + jx, y: -parallax.y * 0.18 * u + jy };
   const cx = w * 0.5, cy = h * 0.69, rx = Math.min(w * 0.45, 7.6 * u), ry = 1.9 * u;
   const table = { cx: cx + front.x, cy: cy + front.y, rx, ry };
   const seatPos = seats.map((s, i) => {

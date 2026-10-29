@@ -8,6 +8,7 @@
 import { on, send, logLine, ROOM, ROLE } from "/common/net.js";
 import { updateOverlay } from "/common/overlay.js";
 import { updateTimerAudio } from "/common/timer-audio.js";
+import { ALLOWED as AUDIO, soundOn, setSound } from "/common/audio.js";
 import { updateFeedback } from "/common/feedback.js";
 import { init as initStage, setPresence, setBomb } from "/common/stage.js";
 import { COMMS, HELP, DISPLAY_NAME, REQUIRED_ROLES, renderRoster, rosterFromPresence, pauseText } from "/common/roster.js";
@@ -33,7 +34,13 @@ export function initChrome({ onRearm } = {}) {
     '<span class="role-badge">' + DISPLAY_NAME[ROLE] + "</span>" +
     '<span class="room-code">ROOM <b>' + (ROOM || "????") + "</b></span>" +
     '<div class="roster" id="roster"></div>' +
+    (AUDIO ? '<button class="btn-quiet sound-toggle" id="sound"></button>' : "") +
     '<span class="status" id="status" data-state="off">connecting\u2026</span>';
+  if (AUDIO) {
+    const paint = () => { $("sound").textContent = soundOn() ? "\u266A SOUND ON" : "SOUND OFF"; };
+    $("sound").onclick = () => { setSound(!soundOn()); paint(); };
+    paint();
+  }
 
   $("hud").innerHTML =
     '<div class="timer idle" id="timer"><span class="ghost">88:88</span><span id="time">--:--</span></div>' +
@@ -85,13 +92,23 @@ export function initChrome({ onRearm } = {}) {
     const s = m.payload;
     setPhase(s.phase);
     updateHud(s);
-    updateOverlay(s.phase, onRearm, s.paused, pauseText(presence));
-    updateTimerAudio(s.time_left, s.phase);
+    document.body.classList.toggle("crit", s.phase === "running" && !s.paused && s.time_left < 30);
+    updateOverlay(s.phase, onRearm, s.paused, pauseText(presence), summary(s));
+    updateTimerAudio(s.time_left, s.phase, s.paused);
     updateFeedback(s.strikes, s.modules.filter(mv => mv.solved).length, s.phase);
     setBomb(s);
   });
   on("log", m => logLine(m.text));
   on("error", m => logLine("ERROR " + m.text));
+}
+
+// One line for the DEFUSED / DETONATED screen, from the global state every
+// role already has.
+function summary(s) {
+  const strikes = s.strikes === 0 ? "NO STRIKES" : s.strikes + " STRIKE" + (s.strikes === 1 ? "" : "S");
+  if (s.phase === "won") return mmss(s.time_left) + " TO SPARE \u00b7 " + strikes;
+  if (s.phase === "lost") return s.time_left <= 0 ? "THE CLOCK RAN OUT" : "THREE STRIKES \u00b7 " + mmss(s.time_left) + " WAS LEFT";
+  return "";
 }
 
 function setPhase(p) {

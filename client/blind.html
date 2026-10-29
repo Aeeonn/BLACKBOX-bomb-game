@@ -34,6 +34,7 @@ import { initChrome } from "/common/chrome.js";
 import { makeHold, holdButtons } from "/common/hold.js";
 import { renderBombFace, paintCharge } from "/common/bombface.js";
 import { paintTactile, renderTabs, esc } from "/common/skins.js";
+import { sfx, drone } from "/common/audio.js";
 
 initChrome();
 const $ = id => document.getElementById(id);
@@ -77,6 +78,8 @@ on("probe_result", m => {
   const noun = kind === "gauge" ? "the knob" : kind === "handshake" ? "the port" : "cell " + (m.data.cell + 1);
   el.textContent = m.data.text ? noun + ": " + m.data.text : "nothing here";
   el.classList.toggle("idle", !m.data.text);
+  el.classList.remove("touch"); void el.offsetWidth; el.classList.add("touch");
+  sfx.probe();
 });
 
 // Every way of moving the probe goes through here, so an in-progress hold
@@ -124,12 +127,23 @@ addEventListener("keydown", e => {
   moveTo(mod, cell + (e.key === "ArrowRight" ? 1 : -1));
 });
 
+// The whine rises as the hold charges; the thunk and the slot flash land
+// on commit. (Sound is BLIND/MUTE-only - see audio.js.)
+let whine = null;
+const quiet = () => { if (whine) { whine.stop(); whine = null; } };
 const hold = makeHold({
-  onStart: h => send({ type: "charge", action: "start", kind: h.cfg.chargeKind, module: h.target.module, cell: h.target.cell }),
-  onCancel: () => send({ type: "charge", action: "stop" }),
+  onStart: h => {
+    send({ type: "charge", action: "start", kind: h.cfg.chargeKind, module: h.target.module, cell: h.target.cell });
+    whine = drone();
+  },
+  onCancel: () => { send({ type: "charge", action: "stop" }); quiet(); },
   onCommit: h => {
     send({ type: "charge", action: "stop" });
     send({ type: "act", module: h.target.module, action: { [h.cfg.action]: h.target.cell } });
+    quiet();
+    sfx.commit();
+    const el = h.target.module === mod && $("grid").children[h.target.cell];
+    if (el) { el.classList.remove("committed"); void el.offsetWidth; el.classList.add("committed"); }
   },
 });
 function startHold(cfg) {
@@ -150,6 +164,7 @@ const showActions = holdButtons($("actionbtns"), hold, startHold);
 // The slot under the fingertip fills too, however the hold was started.
 (function animateSlot() {
   const a = hold.active;
+  if (whine) whine.pitch(220 + 520 * hold.progress());
   [...$("grid").children].forEach((el, i) => {
     const mine = !!a && a.target.module === mod && a.target.cell === i;
     el.classList.toggle("charging", mine);

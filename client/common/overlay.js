@@ -25,9 +25,9 @@ function ensure() {
 // overlay shows actually changes - rebuilding each tick would restart its
 // entrance animation ten times a second.
 let shown = null;
-export function updateOverlay(phase, onRearm, paused, pauseLabel) {
+export function updateOverlay(phase, onRearm, paused, pauseLabel, summary) {
   const node = ensure();
-  const key = paused ? "paused|" + pauseLabel : phase + "|" + !!onRearm;
+  const key = paused ? "paused|" + pauseLabel : phase + "|" + !!onRearm + "|" + (summary || "");
   if (key === shown) return;
   shown = key;
   if (paused) {
@@ -44,8 +44,10 @@ export function updateOverlay(phase, onRearm, paused, pauseLabel) {
   node.className = "overlay show " + phase;
   const label = phase === "won" ? "DEFUSED" : "DETONATED";
   node.innerHTML = "<div class='overlay-label'>" + label + "</div>" +
+    "<div class='overlay-summary'></div>" +
     (onRearm ? "<button class='rearm btn-primary'>REARM</button>"
       : "<div class='overlay-sub'>WAITING FOR MUTE TO REARM</div>");
+  node.querySelector(".overlay-summary").textContent = summary || "";
   if (onRearm) {
     node.querySelector(".rearm").onclick = onRearm;
   }
